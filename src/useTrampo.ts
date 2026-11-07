@@ -173,7 +173,7 @@ export function useTrampo() {
       pendingIce.current = [];
       const answer = await peer.createAnswer(); await peer.setLocalDescription(answer);
       await api(`/trips/${current.tripId}/call/answer`, {});
-      sendSignal({ type: 'call-answer', callId: current.callId, answer });
+      sendSignal({ type: 'call-answer', tripId: current.tripId, callId: current.callId, answer });
     } catch (e) { setCall(c => ({ ...c, status: 'error', error: (e as Error).name === 'NotAllowedError' ? 'Microphone permission is needed to answer.' : (e as Error).message })); }
   }
   function toggleMute() { const muted = !callRef.current.muted; stream.current?.getAudioTracks().forEach(t => { t.enabled = !muted; }); setCall(c => ({ ...c, muted })); }

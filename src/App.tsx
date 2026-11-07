@@ -17,13 +17,22 @@ import GoogleSignInButton from './components/GoogleSignInButton';
 import CallOverlay from './components/CallOverlay';
 import SharedTrip from './components/SharedTrip';
 import { isSupabaseLive, supabase } from './supabase';
+import { authCallbackError, clearAuthCallback } from './auth';
 
 const pages: Record<Page, string> = { ride: 'Book a ride', activity: 'My trips', safety: 'Safety centre', vip: 'Trampo VIP', drive: 'Driver hub', operations: 'Operations', profile: 'My profile' };
 function hashPage(): Page { const value = location.hash.replace('#', ''); return value in pages ? value as Page : 'ride'; }
 export default function App() {
   const t = useTrampo();
-  useEffect(() => { if (!isSupabaseLive || !supabase) return; const { data } = supabase.auth.onAuthStateChange(event => { if (event === 'PASSWORD_RECOVERY') setAuth('recovery'); }); return () => data.subscription.unsubscribe(); }, []);
-  const [page, setPage] = useState<Page>(hashPage), [mobileNav, setMobileNav] = useState(false), [auth, setAuth] = useState<'account' | 'login' | 'signup' | 'recovery' | null>(null), [help, setHelp] = useState(false), [notifications, setNotifications] = useState(false), [rideService, setRideService] = useState<Service>('boda');
+  const [page, setPage] = useState<Page>(hashPage), [mobileNav, setMobileNav] = useState(false), [auth, setAuth] = useState<'account' | 'login' | 'signup' | 'recovery' | null>(null), [authError, setAuthError] = useState(''), [help, setHelp] = useState(false), [notifications, setNotifications] = useState(false), [rideService, setRideService] = useState<Service>('boda');
+  useEffect(() => {
+    if (!isSupabaseLive || !supabase) return;
+    const callbackError = authCallbackError(location.href);
+    if (callbackError) { setAuthError(callbackError); setAuth('login'); clearAuthCallback(); }
+    const { data } = supabase.auth.onAuthStateChange(event => {
+      if (event === 'PASSWORD_RECOVERY') { setAuthError(''); setAuth('recovery'); }
+    });
+    return () => data.subscription.unsubscribe();
+  }, []);
   const previousTrip = useRef<string | null>(null);
   function navigate(next: Page) { setPage(next); location.hash = next; setMobileNav(false); window.scrollTo({ top: 0, behavior: 'smooth' }); }
   useEffect(() => { const handler = () => setPage(hashPage()); window.addEventListener('hashchange', handler); return () => window.removeEventListener('hashchange', handler); }, []);
@@ -38,7 +47,7 @@ export default function App() {
     previousTrip.current = active?.id || null;
   }, [t.data?.activeTrip?.id]);
   if (location.pathname.startsWith('/share/') || location.hash.startsWith('#/share/')) return <SharedTrip />;
-  if (!t.data) return <div className="boot-screen"><Logo /><div className="boot-card">{t.error ? <><h2>{t.error.includes('sign in') ? 'Welcome to Trampo.' : 'Let’s reconnect.'}</h2><p>{t.error}</p><div className="account-actions"><Button onClick={() => t.error.includes('sign in') ? setAuth('login') : location.reload()}>{t.error.includes('sign in') ? 'Sign in' : 'Try again'}<ArrowRight size={17} /></Button>{t.error.includes('sign in') && <Button variant="secondary" onClick={() => setAuth('signup')}>Create account</Button>}</div></> : <><span className="boot-spinner" /><h2>Your next journey is loading.</h2><p>Made for Uganda. Built around you.</p></>}</div>{auth && <AuthModal t={t} mode={auth} onClose={() => setAuth(null)} onDriver={() => navigate('ride')} />}</div>;
+  if (!t.data) return <div className="boot-screen"><Logo /><div className="boot-card">{t.error ? <><h2>{t.error.includes('sign in') ? 'Welcome to Trampo.' : 'Let’s reconnect.'}</h2><p>{t.error}</p><div className="account-actions"><Button onClick={() => t.error.includes('sign in') ? (setAuthError(''), setAuth('login')) : location.reload()}>{t.error.includes('sign in') ? 'Sign in' : 'Try again'}<ArrowRight size={17} /></Button>{t.error.includes('sign in') && <Button variant="secondary" onClick={() => { setAuthError(''); setAuth('signup'); }}>Create account</Button>}</div></> : <><span className="boot-spinner" /><h2>Your next journey is loading.</h2><p>Made for Uganda. Built around you.</p></>}</div>{auth && <AuthModal key={auth} t={t} mode={auth} initialError={authError} onClose={() => { setAuth(null); setAuthError(''); }} onDriver={() => navigate('ride')} />}</div>;
   const { data } = t, user = data.user;
   const nav = [{ page: 'ride' as Page, icon: CarFront, label: 'Book a ride' }, { page: 'activity' as Page, icon: Clock3, label: 'My trips' }, { page: 'safety' as Page, icon: ShieldCheck, label: 'Safety centre' }, { page: 'profile' as Page, icon: UserRound, label: 'My profile' }, { page: 'vip' as Page, icon: Crown, label: 'Trampo VIP', tag: 'PREMIUM' }];
   const openVIP = () => { setRideService('vip'); navigate('ride'); };
@@ -61,7 +70,7 @@ export default function App() {
     </main></div>
     {t.toast && <Toast {...t.toast} onClose={() => t.setToast(null)} />}
     <CallOverlay t={t} />
-    {auth && <AuthModal t={t} mode={auth} onClose={() => setAuth(null)} onDriver={role => navigate(role === 'passenger' ? 'ride' : role === 'admin' ? 'operations' : 'drive')} />}
+    {auth && <AuthModal key={auth} t={t} mode={auth} initialError={authError} onClose={() => { setAuth(null); setAuthError(''); }} onDriver={role => navigate(role === 'passenger' ? 'ride' : role === 'admin' ? 'operations' : 'drive')} />}
     {help && <Modal title="A better way to get there." onClose={() => setHelp(false)}><Logo /><p className="modal-copy">Trampo is an Uganda-first taxi, boda, and VIP ride platform built around verified pickups, private connection, and thoughtful care.</p><div className="about-office"><MapPin size={24} /><div><strong>Trampo Head Office</strong><p>{HEAD_OFFICE}<br />Kampala, Uganda</p></div></div><Notice tone="warning"><strong>{isStaticDemo ? 'GitHub Pages static demo.' : isSupabaseLive ? 'Live Supabase backend.' : 'Interactive prototype.'}</strong> {isStaticDemo ? 'This site runs entirely in your browser with simulated data saved locally. It cannot provide live GPS enforcement, real calling, dispatch, payments, or emergency response. Run the full Trampo backend for those features.' : 'This live workspace uses Supabase accounts and real driver availability. No demo fleet, simulated GPS, payment processing, or emergency response is provided. Browser GPS and matched peer-to-peer audio are real when permissions and network connectivity allow.'}</Notice><div className="about-stack"><span><ShieldCheck size={17} /> Server-enforced GPS + PIN start</span><span><Headphones size={17} /> Matched-only, private WebRTC calls</span><span><Moon size={17} /> Night Shield & safety check-ins</span><span><Crown size={17} /> Premium VIP ride selection</span></div><p className="modal-footnote">For a scalable self-hosted voice deployment, Trampo recommends LiveKit’s Apache-2.0 server with a coturn relay. See the repository’s architecture guide for setup and production limitations.</p><Button className="full-width" onClick={() => { setHelp(false); navigate('safety'); }}>Explore the safety centre <ArrowRight size={17} /></Button></Modal>}
     {notifications && <Modal title="Your updates" onClose={() => setNotifications(false)}>{data.activeTrip ? <div className="notification-item"><CarFront size={23} /><div><strong>{data.activeTrip.status === 'searching' ? 'Finding your next ride' : data.activeTrip.status === 'assigned' ? 'Your driver is on the way' : 'Your journey is in progress'}</strong><p>{data.activeTrip.pickup.name} → {data.activeTrip.dropoff.name}</p><button className="text-link" onClick={() => { setNotifications(false); navigate('ride'); }}>View journey <ArrowRight size={14} /></button></div></div> : <div className="notification-item"><Sparkles size={24} /><div><strong>Welcome to Trampo.</strong><p>Your ride updates and safety check-ins will appear here.</p></div></div>}{!!data.operations?.stats.openAlerts && <div className="notification-item"><Bell size={23} /><div><strong>{data.operations.stats.openAlerts} open safety alerts</strong><button className="text-link" onClick={() => { setNotifications(false); navigate('operations'); }}>Open operations <ArrowRight size={14} /></button></div></div>}<p className="modal-footnote">No marketing notifications. Just the things that matter to your journey.</p></Modal>}
   </div>;

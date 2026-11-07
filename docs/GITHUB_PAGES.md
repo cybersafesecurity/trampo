@@ -50,8 +50,11 @@ add the new origin to both places.
 - GitHub Pages serves over HTTPS, which geolocation, the service worker-less
   realtime client, and WebRTC calling all require.
 - Email sign-up requires confirmation; password-reset and confirmation links
-  return to the Pages URL. Configure custom SMTP before inviting real users (the
-  built-in Supabase email service is heavily rate-limited).
+  return to the Pages URL using PKCE. The reserved admin is `trampo.the.app@gmail.com`:
+  first-time signup lets the owner choose a password, and admin access activates only
+  after email confirmation. The built-in mailer can send to this project-owner address
+  (about two emails/hour); configure custom SMTP before inviting non-team users.
+  See `docs/SUPABASE_LIVE.md` for the signup and forgot-password steps.
 - To run the older browser-local demo instead, use `npm run build:pages`
   (mode `pages`) — it is kept for offline evaluation but is **not** what the
   workflow deploys.

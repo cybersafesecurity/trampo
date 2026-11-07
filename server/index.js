@@ -506,6 +506,14 @@ export function createBackend(options = {}) {
     assert(participant(req.trip, req.user.id) && callActive(req.trip), 403, 'Calling is only available during a matched trip.');
     res.json({ iceServers: iceConfig() });
   }));
+  app.post('/api/trips/:id/call/answer', tripAuth, route((req, res) => {
+    assert(participant(req.trip, req.user.id) && callActive(req.trip), 403, 'Calling is only available to the matched passenger and driver, until the trip ends.');
+    const call = db.prepare("SELECT * FROM calls WHERE trip_id=? AND status IN ('ringing','connected')").get(req.trip.id);
+    assert(call && call.initiated_by !== req.user.id, 409, 'There is no incoming call to answer.');
+    db.prepare("UPDATE calls SET status='connected',answered_at=coalesce(answered_at,?) WHERE id=?").run(Date.now(), call.id);
+    event(db, req.trip.id, req.user.id, 'call_answered'); refresh();
+    res.json({ ok: true, callId: call.id });
+  }));
   function iceConfig() {
     const servers = [];
     if (process.env.STUN_URL !== '') servers.push({ urls: process.env.STUN_URL || 'stun:stun.l.google.com:19302' });
@@ -549,8 +557,8 @@ export function createBackend(options = {}) {
           if (msg.offer && (msg.offer.type !== 'offer' || typeof msg.offer.sdp !== 'string')) return;
           if (msg.answer && (msg.answer.type !== 'answer' || typeof msg.answer.sdp !== 'string')) return;
           if (msg.type === 'call-offer' && call.initiated_by === u.id) sendTo(other, { type: 'call-offer', tripId: t.id, callId: call.id, offer: msg.offer, caller: publicUser(u) });
-          if (msg.type === 'call-answer' && call.initiated_by !== u.id && call.status === 'ringing') {
-            db.prepare("UPDATE calls SET status='connected',answered_at=? WHERE id=?").run(Date.now(), call.id);
+          if (msg.type === 'call-answer' && call.initiated_by !== u.id && call.status !== 'ended') {
+            db.prepare("UPDATE calls SET status='connected',answered_at=coalesce(answered_at,?) WHERE id=?").run(Date.now(), call.id);
             sendTo(other, { type: 'call-answer', callId: call.id, answer: msg.answer });
           }
           if (msg.type === 'call-ice') sendTo(other, { type: 'call-ice', callId: call.id, candidate: msg.candidate });

@@ -1,8 +1,9 @@
 import { useEffect, useRef, type ReactNode, type ButtonHTMLAttributes } from 'react';
 import { ArrowRight, Bike, CarFront, Check, Crown, LoaderCircle, ShieldCheck, X, AlertCircle, Info } from 'lucide-react';
 import type { Service } from '../types';
+import { asset } from '../lib';
 
-export function Logo({ small = false }: { small?: boolean }) { return <div className={`brand ${small ? 'brand-small' : ''}`}><img src="/favicon.svg" alt="" /><span>trampo<span className="brand-dot">.</span></span></div>; }
+export function Logo({ small = false }: { small?: boolean }) { return <div className={`brand ${small ? 'brand-small' : ''}`}><img src={asset('favicon.svg')} alt="" /><span>trampo<span className="brand-dot">.</span></span></div>; }
 export function Button({ children, className = '', variant = 'primary', loading, ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'secondary' | 'ghost' | 'danger' | 'gold'; loading?: boolean }) {
   return <button className={`btn btn-${variant} ${className}`} {...props} disabled={props.disabled || loading}>{loading && <LoaderCircle size={17} className="spin" />}{children}</button>;
 }

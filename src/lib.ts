@@ -1,4 +1,6 @@
 import type { Place, Position, Service } from './types';
+import { isStaticDemo, staticApi } from './staticDemo';
+export const asset = (path: string) => `${import.meta.env.BASE_URL}${path.replace(/^\//, '')}`;
 export const HEAD_OFFICE = 'Plot 14 Martyrs Drive, Ntinda Ministers Village';
 export const DEFAULT_PICKUP: Place = { name: 'Acacia Mall, Kisementi', area: 'Kampala', lat: 0.3354, lng: 32.5769 };
 export const PLACES: Place[] = [
@@ -41,6 +43,7 @@ export function estimate(pickup: Position, dropoff: Position, service: Service) 
 }
 export class ApiError extends Error { constructor(message: string, public code?: string, public details?: unknown) { super(message); } }
 export async function api<T = any>(path: string, body?: unknown, method?: string): Promise<T> {
+  if (isStaticDemo) return staticApi<T>(path, body, method);
   const response = await fetch(`/api${path}`, { method: method || (body !== undefined ? 'POST' : 'GET'), credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-Trampo-Client': 'web' }, ...(body !== undefined ? { body: JSON.stringify(body) } : {}) });
   const data = await response.json();
   if (!response.ok) throw new ApiError(data.error || 'Unable to connect to Trampo.', data.code, data.details);

@@ -26,6 +26,10 @@ DEMO_MODE=false NODE_ENV=production PUBLIC_ORIGIN=https://your-domain.example np
 
 This serves the built frontend and API from one origin. It deliberately disables demo accounts, simulated GPS, and unverified-phone login. **Do not launch commercially yet:** see [the production checklist](docs/PRODUCTION_CHECKLIST.md). Use HTTPS and a persistent database volume. Configure the exact public origin behind a reverse proxy.
 
+## GitHub Pages
+
+A static GitHub Pages build is included: `npm run build:pages`, then `npm run preview:pages`. The workflow in `.github/workflows/pages.yml` deploys that build when Pages is set to **GitHub Actions** in repository settings. The Pages version is a browser-only demo with localStorage state; it cannot run the Node/SQLite backend, server-enforced GPS gate, WebSocket signaling, or real calls. See [docs/GITHUB_PAGES.md](docs/GITHUB_PAGES.md).
+
 ## Take the demo for a ride
 
 1. Choose **Garden City**, or search for a saved Uganda destination. You can also enter exact coordinates.

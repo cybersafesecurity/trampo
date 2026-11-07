@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from './lib';
+import { isStaticDemo } from './staticDemo';
 import type { Bootstrap, CallState } from './types';
 
 export function useTrampo() {
@@ -52,6 +53,11 @@ export function useTrampo() {
   }, [cleanupCall]);
   useEffect(() => {
     if (!data?.user.id) return;
+    if (isStaticDemo) {
+      setConnected(true);
+      const poll = setInterval(() => { reload(); }, 2000);
+      return () => { clearInterval(poll); cleanupCall(); };
+    }
     let live = true, retry: ReturnType<typeof setTimeout>, attempts = 0;
     const connect = () => {
       const socket = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`); ws.current = socket;

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { ArrowRight, ArrowUpRight, CalendarDays, Check, ChevronDown, Clock3, Crosshair, Crown, Leaf, LocateFixed, LockKeyhole, MapPin, Moon, Phone, ShieldCheck, Smartphone, Sparkles, Users, WalletCards } from 'lucide-react';
 import type { Page, Place, Service } from '../types';
 import type { Trampo } from '../useTrampo';
-import { api, DEFAULT_PICKUP, estimate, money, PLACES, SERVICE_INFO } from '../lib';
+import { api, asset, DEFAULT_PICKUP, estimate, money, PLACES, SERVICE_INFO } from '../lib';
 import { Badge, Button, Field, Notice, SafetySeal, SectionHeading, VehicleIcon } from './ui';
 import CityMap from './CityMap';
 import PlacePicker from './PlacePicker';
@@ -57,7 +57,7 @@ export default function RideView({ t, navigate, initialService = 'boda' }: { t: 
     </div>
     <div className="discovery-grid">
       <section className="safety-discovery"><div className="discovery-top"><span className="eyebrow">MORE THAN A RIDE</span><ShieldCheck size={29} strokeWidth={1.3} /></div><h2>Good rides.<br />Better peace of mind.</h2><p>Because getting there should feel as good as arriving.</p><div className="safety-pills"><span><LocateFixed size={14} /> Verified pickups</span><span><Phone size={14} /> Private calls</span><span><Moon size={14} /> Night Shield</span></div><button onClick={() => navigate('safety')}>Meet your safety net <ArrowUpRight size={17} /></button><div className="safety-art" aria-hidden="true"><div /><div /><ShieldCheck size={90} strokeWidth={.8} /></div></section>
-      <section className="vip-discovery"><img src="/images/vip-drive.jpg" alt="Black executive car on a leafy Kampala street" /><div className="vip-discovery-content"><span className="eyebrow"><Crown size={14} /> TRAMPO VIP</span><h2>A class above.</h2><p>Exceptional cars. Effortless journeys.</p><button onClick={() => navigate('vip')}>Discover VIP <ArrowUpRight size={16} /></button></div></section>
+      <section className="vip-discovery"><img src={asset('images/vip-drive.jpg')} alt="Black executive car on a leafy Kampala street" /><div className="vip-discovery-content"><span className="eyebrow"><Crown size={14} /> TRAMPO VIP</span><h2>A class above.</h2><p>Exceptional cars. Effortless journeys.</p><button onClick={() => navigate('vip')}>Discover VIP <ArrowUpRight size={16} /></button></div></section>
     </div>
     <div className="ride-bottom-note"><Leaf size={14} /><span>Made for Uganda. Built around you.</span><span className="note-separator">•</span><span>Kampala to every corner of the Pearl of Africa.</span></div>
     {picker && <PlacePicker target={picker} t={t} onSelect={p => picker === 'pickup' ? setPickup(p) : setDropoff(p)} onClose={() => setPicker(null)} />}

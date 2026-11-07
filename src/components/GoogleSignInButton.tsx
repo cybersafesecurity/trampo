@@ -1,23 +1,64 @@
 import { useEffect, useState } from 'react';
 import { api } from '../lib';
+import { authErrorMessage, authRedirectTo } from '../auth';
 import { isStaticDemo } from '../staticDemo';
-import { isSupabaseLive } from '../supabase';
+import { isSupabaseLive, supabase, supabasePublishableKey, supabaseUrl } from '../supabase';
 import { Button, Notice } from './ui';
 
 export function GoogleMark() {
   return <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59A14.4 14.4 0 0 1 9.75 24c0-1.59.27-3.13.76-4.59l-7.98-6.19A23.87 23.87 0 0 0 0 24c0 3.87.93 7.53 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.91-5.8l-7.73-6c-2.15 1.45-4.92 2.3-8.18 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>;
 }
+
+type GoogleSettings = { external?: { google?: boolean } };
 export default function GoogleSignInButton({ enabled, intent = 'signin', label }: { enabled?: boolean; intent?: 'signin' | 'link'; label?: string }) {
-  const [available, setAvailable] = useState(enabled), [busy, setBusy] = useState(false), [error, setError] = useState('');
-  useEffect(() => { if (enabled !== undefined) { setAvailable(enabled); return; } let live = true; api('/config').then(c => { if (live) setAvailable(!!c.googleSignIn); }).catch(() => { if (live) setAvailable(false); }); return () => { live = false; }; }, [enabled]);
+  const [available, setAvailable] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState('');
+
+  useEffect(() => {
+    let live = true;
+    setError('');
+    if (isSupabaseLive && supabase) {
+      // Supabase Auth is the source of truth on the live static build. The demo
+      // Edge endpoint intentionally does not proxy Google OAuth.
+      setAvailable(false);
+      fetch(`${supabaseUrl}/auth/v1/settings`, { headers: { apikey: supabasePublishableKey } })
+        .then(response => response.ok ? response.json() as Promise<GoogleSettings> : Promise.reject(new Error('Could not check Google sign-in availability.')))
+        .then(settings => { if (live) setAvailable(!!settings.external?.google); })
+        .catch(() => { if (live) setAvailable(false); });
+      return () => { live = false; };
+    }
+    if (enabled !== undefined) { setAvailable(enabled); return; }
+    api('/config').then(c => { if (live) setAvailable(!!c.googleSignIn); }).catch(() => { if (live) setAvailable(false); });
+    return () => { live = false; };
+  }, [enabled]);
+
   async function start() {
     setBusy(true); setError('');
     try {
+      if (isSupabaseLive && supabase) {
+        const options = { redirectTo: authRedirectTo(), queryParams: { prompt: 'select_account' }, skipBrowserRedirect: true };
+        const result = intent === 'link'
+          ? await supabase.auth.linkIdentity({ provider: 'google', options })
+          : await supabase.auth.signInWithOAuth({ provider: 'google', options });
+        if (result.error) throw result.error;
+        if (!result.data?.url) throw new Error('Google sign-in did not return a redirect URL.');
+        const url = new URL(result.data.url), expected = new URL(supabaseUrl);
+        const allowedPaths = ['/auth/v1/authorize', '/auth/v1/user/identities/authorize'];
+        if (url.protocol !== 'https:' || url.origin !== expected.origin || !allowedPaths.includes(url.pathname))
+          throw new Error('Invalid Google sign-in destination.');
+        window.location.assign(url.href);
+        return;
+      }
       const result = await api<{ url: string }>('/auth/google/start', { intent });
       const url = new URL(result.url);
       if (url.protocol !== 'https:' || url.hostname !== 'accounts.google.com') throw new Error('Invalid Google sign-in destination.');
       window.location.assign(url.href);
-    } catch (e) { setError((e as Error).message); setBusy(false); }
+    } catch (e) { setError(isSupabaseLive ? authErrorMessage(e) : (e as Error).message); setBusy(false); }
   }
-  return <div className="google-signin"><Button type="button" variant="secondary" className="full-width google-button" disabled={!available} loading={busy} onClick={start}><GoogleMark />{label || (intent === 'link' ? 'Connect Google account' : 'Continue with Google')}</Button>{!available && <p className="field-help">{isStaticDemo ? 'Google sign-in requires the live Trampo backend; it is not simulated on GitHub Pages.' : isSupabaseLive ? 'Google sign-in is not enabled on this Supabase project. Use email and password.' : 'Google sign-in is not configured yet. A server administrator must add the Google OAuth credentials.'}</p>}{error && <Notice tone="error">{error}</Notice>}</div>;
+
+  const disabledHelp = isStaticDemo
+    ? 'Google sign-in requires the live Trampo backend; it is not simulated on the static demo.'
+    : isSupabaseLive
+      ? 'Google sign-in is turned off in Supabase Auth. Enable the Google provider and add an OAuth client ID/secret, then reload this page.'
+      : 'Google sign-in is not configured yet. A server administrator must add the Google OAuth credentials.';
+  return <div className="google-signin"><Button type="button" variant="secondary" className="full-width google-button" disabled={!available} loading={busy} onClick={start}><GoogleMark />{label || (intent === 'link' ? 'Connect Google account' : 'Continue with Google')}</Button>{!available && <p className="field-help">{disabledHelp}</p>}{error && <Notice tone="error">{error}</Notice>}</div>;
 }

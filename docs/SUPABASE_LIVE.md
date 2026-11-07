@@ -81,6 +81,50 @@ For passenger/driver emails outside the team, configure custom SMTP in
 before launch. Enter SMTP credentials only in Supabase's dashboard, never in source code
 or chat. Gmail SMTP, if used, requires an app password and 2-Step Verification.
 
+## Email rate limits — use custom SMTP, not the test mailer
+
+Supabase's built-in SMTP is only for testing: it sends to project team members and is
+currently limited to about **2 messages/hour project-wide**. Raising the app cooldown
+cannot bypass that service limit. For real signup/reset volume:
+
+1. Choose an SMTP provider (Brevo, Resend, Postmark, SendGrid, AWS SES, or Gmail SMTP
+   with an app password for small/internal use). Verify the sending domain/address and
+   create SMTP credentials.
+2. Open [Supabase SMTP settings](https://supabase.com/dashboard/project/euknlccrsfvuaymuecpd/auth/smtp),
+   enable **Custom SMTP**, and enter host, port, username, password, sender name and
+   sender email. Enter credentials only in Supabase's dashboard/secret store, never in
+   Git or chat.
+3. In [Auth rate limits](https://supabase.com/dashboard/project/euknlccrsfvuaymuecpd/auth/rate-limits),
+   raise the email-send limit to match the provider (Supabase defaults to 30/hour after
+   custom SMTP; increase gradually while watching deliverability).
+4. Keep email confirmation enabled. Test signup and forgot-password with a non-team
+   address, and add SPF/DKIM/DMARC records for the sending domain.
+
+Common examples: Brevo `smtp-relay.brevo.com:587`; Resend `smtp.resend.com:465` with
+username `resend`; Gmail `smtp.gmail.com:587` with a Google app password (requires
+2-Step Verification and is not ideal for production volume).
+
+## Google sign-in (live Supabase build)
+
+The live button uses `supabase.auth.signInWithOAuth` / `linkIdentity`, not the demo
+Node endpoint. It enables itself when Supabase Auth reports the Google provider on.
+To turn it on:
+
+1. In Google Cloud Console, configure the OAuth consent screen and create an OAuth
+   client ID of type **Web application**.
+2. Add this authorized redirect URI exactly:
+   `https://euknlccrsfvuaymuecpd.supabase.co/auth/v1/callback`.
+3. In [Supabase Google provider settings](https://supabase.com/dashboard/project/euknlccrsfvuaymuecpd/auth/providers),
+   enable Google and paste the client ID and client secret. The secret stays in Supabase.
+4. Keep the Pages URL in Auth redirect allow-list (already configured). Reload the app;
+   **Continue with Google** should become available.
+
+Google verifies email, not phone. New Google-only accounts are passengers; Google never
+grants admin or driver approval. To connect Google to an existing password account, sign
+in first and use **My profile → Connect Google account**; if Supabase manual identity
+linking is disabled, enable it in Auth settings before linking. The reserved admin email
+still activates admin only through confirmed email/password signup, not Google-only signup.
+
 ## Calling / VoIP
 
 The live build uses direct browser-to-browser WebRTC (no per-minute charge, no
@@ -96,8 +140,9 @@ server is **LiveKit** (Apache-2.0) with **coturn**; see `docs/ARCHITECTURE.md` a
   The reserved admin/owner address can receive setup/reset mail; configure custom SMTP
   for public signup/reset volume and any non-team address.
 - **No phone OTP** — booking requires a confirmed **email** + real GPS, not a verified phone.
-- **Google sign-in** is implemented in the demo backend but **not enabled** on this
-  Supabase project (the button is honestly disabled). Email + password is the live method.
+- **Google sign-in** uses Supabase Auth on the live build, but the Google provider is
+  disabled until an OAuth client ID/secret is added in Supabase. The button checks
+  Supabase's public Auth settings and stays disabled until then.
 - **No document upload/KYC, no in-app payments, no external emergency dispatch.** SOS
   records an alert to Trampo Operations only. Driver "approval" is an operational
   document check, not automated verification.

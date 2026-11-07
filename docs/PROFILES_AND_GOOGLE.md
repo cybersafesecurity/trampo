@@ -59,9 +59,13 @@ GOOGLE_REDIRECT_URI=https://your-domain.example/api/auth/google/callback
 
 Without credentials the button is disabled and explains that server configuration is required. The app does not fake a Google login.
 
-## GitHub Pages limitation
+## GitHub Pages / hosting note
 
-GitHub Pages is static hosting. The Pages build includes the profile UI and local demo profile editing, but Google sign-in is disabled there because a static site cannot securely exchange OAuth codes, protect a client secret, or issue server sessions. Use the Node backend for real Google sign-in.
+The older **static demo** build cannot run the Node OAuth callback, so Google sign-in is
+disabled there. The current **live GitHub Pages build** is different: it talks directly to
+Supabase Auth, and Google sign-in uses Supabase's hosted OAuth callback. See
+`docs/SUPABASE_LIVE.md` for the live Google provider setup. The Node/SQLite instructions
+above apply to the separate demo backend.
 
 ## Tests
 

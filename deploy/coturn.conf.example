@@ -1,0 +1,19 @@
+# EXAMPLE ONLY. Replace domain/realm/secret and prefer ephemeral HMAC credentials.
+listening-port=3478
+tls-listening-port=5349
+fingerprint
+use-auth-secret
+static-auth-secret=REPLACE_WITH_A_LONG_RANDOM_SECRET
+realm=turn.example.com
+# Set listening-device and external-ip for your actual VM/network interface.
+# listening-device=YOUR_PRIVATE_INTERFACE_IP
+# external-ip=YOUR_PUBLIC_IP/YOUR_PRIVATE_INTERFACE_IP
+min-port=49152
+max-port=49252
+no-multicast-peers
+no-cli
+# Restrict relay destinations to prevent abuse of internal networks.
+# denied-peer-ip=10.0.0.0-10.255.255.255
+# denied-peer-ip=172.16.0.0-172.31.255.255
+# denied-peer-ip=192.168.0.0-192.168.255.255
+# Configure TLS certificate paths, logging, firewall, and monitoring upstream.

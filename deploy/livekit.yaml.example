@@ -1,0 +1,13 @@
+# EXAMPLE ONLY — not used by the current direct-WebRTC implementation.
+# Follow https://docs.livekit.io/home/self-hosting/vm/ and generate real keys.
+port: 7880
+rtc:
+  tcp_port: 7881
+  port_range_start: 50000
+  port_range_end: 50100
+  use_external_ip: true
+keys:
+  REPLACE_WITH_GENERATED_KEY_ID: REPLACE_WITH_GENERATED_SECRET
+log_level: info
+# Put TLS termination and a restrictive firewall in front of this service.
+# Do not commit real keys or expose this example unchanged.

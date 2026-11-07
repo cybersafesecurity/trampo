@@ -1,0 +1,13 @@
+import { randomUUID } from 'node:crypto';
+import { resolve } from 'node:path';
+import { openStore, hashPassword } from '../server/store.js';
+import { normalizePhone } from '../server/domain.js';
+const phone = normalizePhone(process.env.ADMIN_PHONE || '');
+const password = process.env.ADMIN_PASSWORD || '';
+const name = process.env.ADMIN_NAME || 'Trampo Operations';
+if (password.length < 14) throw new Error('Set ADMIN_PHONE and a unique ADMIN_PASSWORD of at least 14 characters.');
+const db = openStore(resolve(process.env.DATABASE_PATH || './data/trampo.sqlite'), false);
+if (db.prepare('SELECT id FROM users WHERE phone=?').get(phone)) throw new Error('An account with that phone already exists.');
+db.prepare('INSERT INTO users(id,name,phone,password_hash,role,is_demo,phone_verified,created_at) VALUES(?,?,?,?,?,?,1,?)').run(randomUUID(), name, phone, hashPassword(password), 'admin', 0, Date.now());
+db.close();
+console.log('Operations account created. Password was not logged. Enable MFA at your identity/reverse-proxy layer before public deployment.');

@@ -12,6 +12,6 @@ if (sandbox) {
 export default defineConfig({
   testDir: './e2e', timeout: 60000, expect: { timeout: 15000 }, fullyParallel: false, workers: 1,
   reporter: [['list']], outputDir: 'test-results',
-  use: { baseURL: 'http://127.0.0.1:3002', viewport: { width: 1440, height: 1000 }, permissions: ['microphone'], launchOptions: { executablePath, args }, screenshot: 'only-on-failure', trace: 'retain-on-failure' },
-  webServer: { command: 'node server/index.js', url: 'http://127.0.0.1:3002/api/health', reuseExistingServer: false, timeout: 30000, env: { PORT: '3002', DATABASE_PATH: ':memory:', DEMO_MODE: 'true', NODE_ENV: 'development' } },
+  use: { baseURL: 'http://127.0.0.1:3002', viewport: { width: 1440, height: 1000 }, permissions: ['microphone'], launchOptions: { executablePath, args }, screenshot: 'only-on-failure', trace: sandbox ? 'off' : 'retain-on-failure' },
+  webServer: { command: 'node server/index.js', url: 'http://127.0.0.1:3002/api/health', reuseExistingServer: false, timeout: 30000, env: { PORT: '3002', DATABASE_PATH: ':memory:', DEMO_MODE: 'true', NODE_ENV: 'development', STUN_URL: '' } },
 });

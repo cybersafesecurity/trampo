@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../lib';
 import { isStaticDemo } from '../staticDemo';
+import { isSupabaseLive } from '../supabase';
 import { Button, Notice } from './ui';
 
 export function GoogleMark() {
@@ -18,5 +19,5 @@ export default function GoogleSignInButton({ enabled, intent = 'signin', label }
       window.location.assign(url.href);
     } catch (e) { setError((e as Error).message); setBusy(false); }
   }
-  return <div className="google-signin"><Button type="button" variant="secondary" className="full-width google-button" disabled={!available} loading={busy} onClick={start}><GoogleMark />{label || (intent === 'link' ? 'Connect Google account' : 'Continue with Google')}</Button>{!available && <p className="field-help">{isStaticDemo ? 'Google sign-in requires the live Trampo backend; it is not simulated on GitHub Pages.' : 'Google sign-in is not configured yet. A server administrator must add the Google OAuth credentials.'}</p>}{error && <Notice tone="error">{error}</Notice>}</div>;
+  return <div className="google-signin"><Button type="button" variant="secondary" className="full-width google-button" disabled={!available} loading={busy} onClick={start}><GoogleMark />{label || (intent === 'link' ? 'Connect Google account' : 'Continue with Google')}</Button>{!available && <p className="field-help">{isStaticDemo ? 'Google sign-in requires the live Trampo backend; it is not simulated on GitHub Pages.' : isSupabaseLive ? 'Google sign-in is not enabled on this Supabase project. Use email and password.' : 'Google sign-in is not configured yet. A server administrator must add the Google OAuth credentials.'}</p>}{error && <Notice tone="error">{error}</Notice>}</div>;
 }

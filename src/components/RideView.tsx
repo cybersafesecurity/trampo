@@ -49,7 +49,7 @@ export default function RideView({ t, navigate, initialService = 'boda' }: { t: 
         {!dropoff && <div className="quick-destinations"><span>Try</span>{[PLACES[1], PLACES[8], PLACES[2]].map(p => <button key={p.name} onClick={() => setDropoff(p)}>{p.name.includes('Airport') ? 'Airport' : p.name.includes('Garden') ? 'Garden City' : 'Ntinda'}<ArrowUpRight size={11} /></button>)}</div>}
         <div className="payment-row"><WalletCards size={18} /><select aria-label="Payment method" value={payment} onChange={e => setPayment(e.target.value)}><option value="cash">Cash</option><option value="mobile_money">Mobile money · pay driver</option></select><ChevronDown size={14} /><button onClick={() => setShowNote(!showNote)}>{showNote ? 'Hide note' : 'Add a note'}</button></div>
         {showNote && <Field label="Note for your driver"><input value={note} onChange={e => setNote(e.target.value)} maxLength={240} placeholder="A landmark, accessibility need, or quiet ride" /></Field>}
-        {payment === 'mobile_money' && <p className="field-help">Arrange mobile money directly with your driver. In-app payment processing is not connected in this preview.</p>}
+        {payment === 'mobile_money' && <p className="field-help">Arrange mobile money directly with your driver. In-app payment processing is not connected.</p>}
         <Button className="book-button full-width" onClick={book} loading={busy} disabled={tab === 'later' && !schedule}>{tab === 'later' ? 'Schedule' : 'Request'} {SERVICE_INFO[service].name}<ArrowRight size={19} /></Button>
         <div className="booking-assurance"><LockKeyhole size={12} /><span>No trip starts until your GPS locations match.</span></div>
       </section>}

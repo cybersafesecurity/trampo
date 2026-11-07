@@ -6,7 +6,22 @@ An Uganda-first, responsive ride-hailing application with a working Node/SQLite 
 
 > **Interactive prototype, not a licensed transport or emergency service.** The default fleet is simulated. No real ride, payment, background check, SMS, or emergency responder is dispatched. Browser GPS and peer-to-peer audio are real when permissions, HTTPS, and network conditions allow.
 
-## Run locally
+## Live backend (Supabase, no demo)
+
+A real, account-backed deployment is included alongside the demo: **Supabase Auth
+(email + password), Postgres, an Edge Function, Realtime call signalling, and pg_cron.**
+It has no demo accounts, no simulated GPS, and no auto-dispatch. Build and serve it with:
+
+```bash
+cp .env.live.example .env.live   # fill in the public Supabase URL + publishable key
+npm run build:live && npm run preview:live   # serves dist-live/ on 0.0.0.0:3000
+```
+
+See **[docs/SUPABASE_LIVE.md](docs/SUPABASE_LIVE.md)** for setup, the server-enforced
+GPS/PIN start gate, matched-only calling, driver approval, the first admin account, and
+the remaining production limitations (SMTP, OTP, KYC, payments, TURN, emergency response).
+
+## Run locally (demo)
 
 Requires **Node.js 22.13+** (the built-in `node:sqlite` module is experimental on Node 22) and npm.
 

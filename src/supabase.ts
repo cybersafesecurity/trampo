@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 export const isSupabaseLive = import.meta.env.VITE_TRAMPO_BACKEND === 'supabase';
 const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
+export const supabaseUrl = (url || '').replace(/\/$/, '');
 export const supabasePublishableKey = key || '';
 export const supabase = isSupabaseLive && url && key ? createClient(url, key, {
   // PKCE keeps the email callback exchangeable only in the browser that has the

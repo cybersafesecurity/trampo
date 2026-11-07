@@ -17,7 +17,7 @@ const bootstrap = () => ({
   operations: { alerts: [], drivers: [], trips: [], stats: { drivers: 0, approved: 0, pending: 0, active: 0, completed: 0, openAlerts: 0 } },
 });
 
-async function setup(page, { recoverError } = {}) {
+async function setup(page, { recoverError, googleEnabled = false } = {}) {
   const calls = { signup: null, recover: null, exchange: null, update: null };
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
@@ -27,6 +27,8 @@ async function setup(page, { recoverError } = {}) {
     if (request.method() === 'OPTIONS') return route.fulfill({ status: 204, headers });
     const json = (body, status = 200) => route.fulfill({ status, contentType: 'application/json', headers, body: JSON.stringify(body) });
     const body = ['POST', 'PUT'].includes(request.method()) ? request.postDataJSON() : {};
+    if (url.pathname === '/auth/v1/settings') return json({ external: { email: true, google: googleEnabled } });
+    if (url.pathname === '/auth/v1/authorize' || url.pathname === '/auth/v1/user/identities/authorize') return route.fulfill({ status: 200, contentType: 'text/html', headers, body: 'Supabase Google OAuth redirect' });
     if (url.pathname === '/auth/v1/signup') { calls.signup = { ...body, query: Object.fromEntries(url.searchParams) }; return json({ ...user, email_confirmed_at: null }); }
     if (url.pathname === '/auth/v1/recover') {
       calls.recover = { ...body, query: Object.fromEntries(url.searchParams) };
@@ -115,5 +117,20 @@ test('non-team addresses get the custom-SMTP explanation rather than a false suc
   const dialog = page.getByRole('dialog');
   await expect(dialog).toContainText('custom SMTP configured in Supabase');
   await expect(dialog).not.toContainText('a reset link has been sent');
+  expect(errors).toEqual([]);
+});
+
+
+test('live Google button follows Supabase Auth settings and starts a PKCE OAuth redirect', async ({ page }) => {
+  const { errors } = await setup(page, { googleEnabled: true });
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  const google = page.getByRole('button', { name: 'Continue with Google' });
+  await expect(google).toBeEnabled();
+  await google.click();
+  await page.waitForURL(/\/auth\/v1\/authorize/);
+  const url = new URL(page.url());
+  expect(url.searchParams.get('provider')).toBe('google');
+  expect(url.searchParams.get('redirect_to')).toContain('/trampo/');
+  expect(url.searchParams.get('code_challenge')).toBeTruthy();
   expect(errors).toEqual([]);
 });

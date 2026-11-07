@@ -8,6 +8,7 @@
     "dev": "node --env-file-if-exists=.env server/index.js",
     "build": "tsc -b && vite build",
     "build:pages": "tsc -b && vite build --mode pages --base=./",
+    "build:pages:live": "tsc -b && vite build --mode live --base=./ --outDir dist",
     "build:live": "tsc -b && vite build --mode live --outDir dist-live",
     "preview:live": "vite preview --mode live --host 0.0.0.0 --port 3000 --outDir dist-live",
     "preview:pages": "vite preview --mode pages --base=./ --host 0.0.0.0 --port 4173",

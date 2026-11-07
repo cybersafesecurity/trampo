@@ -9,9 +9,10 @@ Public URL: **https://cybersafesecurity.github.io/trampo/**
 
 ## How it builds
 
-The workflow `.github/workflows/pages.yml` runs on pushes to `main` (and the
-active Arena branch) and on demand via **Actions → Deploy Trampo to GitHub Pages
-→ Run workflow**. It:
+The workflow `.github/workflows/pages.yml` runs on pushes to `main` and on demand
+via **Actions → Deploy Trampo to GitHub Pages → Run workflow**. (The `github-pages`
+environment only allows `main` to deploy, so changes reach Pages when merged to
+`main`.) It:
 
 1. `npm ci`
 2. `npm run build:pages:live` — `vite build --mode live --base=./` into `dist/`.

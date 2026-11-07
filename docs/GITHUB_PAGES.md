@@ -6,7 +6,8 @@ GitHub Pages hosts static files only. It cannot run Trampo's Node/SQLite API, We
 
 - The full Trampo responsive UI: booking, VIP, safety centre, driver hub, operations, activity, and shared-trip view.
 - A localStorage-backed demo state: simulated fleet, trip requests, GPS/PIN demo flow, driver registration/review, contacts, alerts, ratings, and receipts.
-- Clear labelling that the site is a static demo. Calling buttons explain that live calling requires the full backend.
+- Role-specific profile pages and local demo profile editing for admins, car drivers, motorbike riders and passengers.
+- Clear labelling that the site is a static demo. Calling buttons explain that live calling requires the full backend. Google sign-in is disabled on Pages because secure OAuth needs the Node backend and a protected client secret.
 - Hash-based share links that work in the same browser profile where they were created. They are not public cross-device tracking links.
 
 ## Deploy

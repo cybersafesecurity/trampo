@@ -2,6 +2,8 @@ import type { Place, Position, Service } from './types';
 import { isStaticDemo, staticApi } from './staticDemo';
 export const asset = (path: string) => `${import.meta.env.BASE_URL}${path.replace(/^\//, '')}`;
 export const HEAD_OFFICE = 'Plot 14 Martyrs Drive, Ntinda Ministers Village';
+export const ACCOUNT_LABELS = { admin: 'Administrator', car_driver: 'Car driver', motorbike_rider: 'Motorbike rider', passenger: 'Passenger' } as const;
+export const accountLabel = (type?: keyof typeof ACCOUNT_LABELS) => type ? ACCOUNT_LABELS[type] : 'Passenger';
 export const DEFAULT_PICKUP: Place = { name: 'Acacia Mall, Kisementi', area: 'Kampala', lat: 0.3354, lng: 32.5769 };
 export const PLACES: Place[] = [
   DEFAULT_PICKUP,

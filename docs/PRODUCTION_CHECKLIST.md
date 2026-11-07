@@ -18,7 +18,8 @@ This repository is a functional prototype. Checking items below requires busines
 - [ ] Add route-deviation and prolonged-stop analysis using real road routes; test false positives and missed events.
 - [ ] Obtain appropriate consent for trusted-contact sharing and any future audio recording. Calls are not recorded today.
 - [ ] Review obligations under Uganda's Data Protection and Privacy Act and applicable Personal Data Protection Office requirements; define retention, deletion, access, breach response, and cross-border transfer controls.
-- [ ] Add account recovery, session revocation, admin MFA, granular staff permissions, immutable audit storage, and secret rotation.
+- [ ] Add account recovery, session revocation, admin MFA, granular staff permissions, immutable audit storage, and secret rotation. Google OAuth is implemented, but admin MFA and phone OTP still require production providers/policy.
+- [ ] Configure Google OAuth credentials and exact HTTPS redirect URI through a secret manager; keep client secrets server-side and review consent-screen/scopes/privacy disclosures.
 - [ ] Penetration-test authorization, WebSocket signaling, share links, rate limits, and location privacy. Add a deployment-specific CSP/frame-ancestors policy.
 
 ## Fleet, maps, and reliability

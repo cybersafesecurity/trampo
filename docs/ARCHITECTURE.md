@@ -55,7 +55,9 @@ The files in `deploy/` are **examples**, not a turnkey secure deployment. Genera
 
 ## Data and security boundaries
 
-SQLite tables hold users, driver profiles, latest location fixes, trips, hashed sessions, audit events, contacts, alerts, hashed share tokens, and call metadata. Passwords use scrypt with random salts. Session and share tokens are random and stored hashed. Cookies are HttpOnly/SameSite Strict and Secure in production. Mutations require a custom client header and same-origin/public-origin checks. WebSocket upgrades validate the session and origin.
+SQLite tables hold users, role-specific profile fields, driver/vehicle profiles, Google identity links, hashed OAuth flows, latest location fixes, trips, hashed sessions, audit events, contacts, alerts, hashed share tokens, and call metadata. Passwords use scrypt with random salts. Session and share tokens are random and stored hashed. Cookies are HttpOnly/SameSite Lax and Secure in production; Lax permits the top-level Google OAuth callback while mutations still require a custom client header and same-origin/public-origin checks. WebSocket upgrades validate the session, active account status and origin.
+
+Google sign-in uses server-side OpenID Connect authorization code + PKCE, one-time state, nonce, JWKS signature verification, issuer/audience/expiry checks and a verified-email claim. New Google identities are passengers; roles/approval are never derived from Google claims. Existing accounts must explicitly link Google after signing in. See `docs/PROFILES_AND_GOOGLE.md`.
 
 Only participants and operations receive identifiable trip fixes. The public share endpoint returns a limited read-only view without phone numbers or PINs. Links expire and are revoked at completion. The pre-match fleet map currently exposes online driver coordinates; production should round/jitter them and enforce a need-to-know location policy.
 

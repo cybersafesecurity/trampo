@@ -60,5 +60,6 @@ export function normalizePhone(value) {
 }
 export function publicUser(user) {
   if (!user) return null;
-  return { id: user.id, name: user.name, role: user.role, phone: user.phone, initials: user.name.split(' ').map(s => s[0]).slice(0, 2).join('') };
+  const type = user.account_type || (user.role === 'driver' ? 'car_driver' : user.role);
+  return { id: user.id, name: user.name, role: user.role, accountType: type, phone: user.phone || '', avatarUrl: /^https:\/\//i.test(user.avatar_url || '') ? user.avatar_url : '', initials: user.name.trim().split(/\s+/).map(s => s[0]).slice(0, 2).join('').toUpperCase() };
 }

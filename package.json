@@ -5,11 +5,11 @@
   "type": "module",
   "description": "Uganda-first ride hailing with verified pickup and private calling",
   "scripts": {
-    "dev": "node server/index.js",
+    "dev": "node --env-file-if-exists=.env server/index.js",
     "build": "tsc -b && vite build",
     "build:pages": "tsc -b && vite build --mode pages --base=./",
     "preview:pages": "vite preview --mode pages --base=./ --host 0.0.0.0 --port 4173",
-    "start": "NODE_ENV=production node server/index.js",
+    "start": "NODE_ENV=production node --env-file-if-exists=.env server/index.js",
     "test": "node --test tests/*.test.js",
     "test:e2e": "playwright test",
     "check": "tsc -b"
@@ -19,6 +19,7 @@
     "@fontsource-variable/manrope": "^5.3.0",
     "@vitejs/plugin-react": "^4.7.0",
     "express": "^5.1.0",
+    "jose": "^6.2.15",
     "lucide-react": "^0.468.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",

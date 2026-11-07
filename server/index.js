@@ -5,7 +5,8 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer, WebSocket } from 'ws';
 import { z } from 'zod';
-import { openStore, hashPassword, checkPassword, user, driver, fix, saveFix, event, activeTrip, trip, setting, setSetting, transaction } from './store.js';
+import { openStore, hashPassword, checkPassword, user, userProfile, driver, fix, saveFix, event, activeTrip, trip, setting, setSetting, transaction, accountType } from './store.js';
+import { createGoogleAuth } from './google.js';
 import { inUganda, distanceMeters, isNight, quote, gpsMatch, interpolate, normalizePhone, publicUser, SERVICES, OFFICE } from './domain.js';
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
@@ -16,11 +17,15 @@ const positionSchema = z.object({ lat: z.number().finite(), lng: z.number().fini
 const fixSchema = positionSchema.extend({ accuracy: z.number().finite().min(0).max(100000), source: z.enum(['browser', 'simulated']).default('browser') });
 class ApiError extends Error { constructor(status, message, code = 'REQUEST_FAILED', details) { super(message); this.status = status; this.code = code; this.details = details; } }
 const assert = (condition, status, message, code, details) => { if (!condition) throw new ApiError(status, message, code, details); };
-const phoneSchema = z.string().transform(normalizePhone);
+const phoneSchema = z.string().max(40).transform((value, ctx) => {
+  try { return normalizePhone(value); }
+  catch { ctx.addIssue({ code: 'custom', message: 'Enter a Uganda mobile number, e.g. 0772 000 101.' }); return z.NEVER; }
+});
 
 export function createBackend(options = {}) {
   const demo = options.demo ?? (process.env.DEMO_MODE !== 'false' && process.env.NODE_ENV !== 'production');
   const db = openStore(options.dbPath ?? process.env.DATABASE_PATH ?? resolve(root, 'data/trampo.sqlite'), demo);
+  const google = createGoogleAuth(db, options);
   const app = express();
   const server = createServer(app);
   const wss = new WebSocketServer({ noServer: true, maxPayload: 24 * 1024 });
@@ -56,9 +61,11 @@ export function createBackend(options = {}) {
   function setSession(res, uid) {
     const token = randomBytes(32).toString('hex');
     db.prepare('INSERT INTO sessions(token_hash,user_id,expires_at) VALUES(?,?,?)').run(hash(token), uid, Date.now() + 7 * 86400000);
-    res.cookie('trampo_session', token, { httpOnly: true, sameSite: 'strict', secure: process.env.NODE_ENV === 'production', maxAge: 7 * 86400000, path: '/' });
+    // Lax allows the top-level OAuth callback to establish a session; mutations
+    // still require the custom client header and an allowed origin below.
+    res.cookie('trampo_session', token, { httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production', maxAge: 7 * 86400000, path: '/' });
   }
-  const auth = route((req, res, next) => { req.user = session(req); assert(req.user, 401, 'Please sign in to continue.'); next(); });
+  const auth = route((req, res, next) => { req.user = session(req); assert(req.user, 401, 'Please sign in to continue.'); assert(req.user.status === 'active', 403, 'This account is suspended. Contact Trampo operations.'); next(); });
   const admin = (req, res, next) => auth(req, res, () => { assert(req.user.role === 'admin', 403, 'Operations access required.'); next(); });
   const requireDriver = (req, res, next) => auth(req, res, () => { assert(req.user.role === 'driver', 403, 'Driver access required.'); next(); });
   function rateBucket(key, max, window = 60000) {
@@ -127,7 +134,7 @@ export function createBackend(options = {}) {
     refresh();
   }
   app.get('/api/health', (req, res) => res.json({ ok: true, demo, calling: 'webrtc-p2p' }));
-  app.get('/api/config', (req, res) => res.json({ demo, office: OFFICE, services: SERVICES, calling: 'webrtc-p2p', serverTime: Date.now() }));
+  app.get('/api/config', (req, res) => res.json({ demo, office: OFFICE, services: SERVICES, calling: 'webrtc-p2p', googleSignIn: google.enabled, serverTime: Date.now() }));
   app.post('/api/demo/session', route((req, res) => {
     assert(demo, 404, 'Not found.'); rateBucket(`demo:${req.ip}`, 30);
     const input = z.object({ role: z.enum(['passenger', 'driver', 'admin']), userId: z.string().max(80).optional() }).parse(req.body);
@@ -141,6 +148,7 @@ export function createBackend(options = {}) {
     const input = z.object({ phone: phoneSchema, password: z.string().min(1).max(128) }).parse(req.body);
     const u = db.prepare('SELECT * FROM users WHERE phone=?').get(input.phone);
     assert(u && checkPassword(input.password, u.password_hash), 401, 'Phone number or password is incorrect.');
+    assert(u.status === 'active', 403, 'This account is suspended. Contact Trampo operations.');
     assert(demo || u.phone_verified, 403, 'Phone verification is required. Configure the production identity provider.');
     setSession(res, u.id); res.json({ user: publicUser(u) });
   }));
@@ -149,7 +157,7 @@ export function createBackend(options = {}) {
     const input = z.object({ name: z.string().trim().min(2).max(80), phone: phoneSchema, password: z.string().min(10).max(128) }).parse(req.body);
     assert(!db.prepare('SELECT id FROM users WHERE phone=?').get(input.phone), 409, 'An account already uses this phone number.');
     const uid = id();
-    db.prepare('INSERT INTO users(id,name,phone,password_hash,role,is_demo,phone_verified,created_at) VALUES(?,?,?,?,?,0,0,?)').run(uid, input.name, input.phone, hashPassword(input.password), 'passenger', Date.now());
+    db.prepare('INSERT INTO users(id,name,phone,password_hash,role,account_type,is_demo,phone_verified,created_at) VALUES(?,?,?,?,?,?,0,0,?)').run(uid, input.name, input.phone, hashPassword(input.password), 'passenger', 'passenger', Date.now());
     if (demo) { db.prepare('UPDATE users SET phone_verified=1 WHERE id=?').run(uid); setSession(res, uid); }
     res.status(201).json({ user: publicUser(user(db, uid)), verificationRequired: !demo });
   }));
@@ -157,6 +165,53 @@ export function createBackend(options = {}) {
     const token = req.headers.cookie.split(';').map(s => s.trim()).find(s => s.startsWith('trampo_session='))?.split('=')[1];
     if (token) db.prepare('DELETE FROM sessions WHERE token_hash=?').run(hash(token));
     res.clearCookie('trampo_session', { path: '/' }); res.json({ ok: true });
+  }));
+  app.post('/api/auth/google/start', route((req, res) => {
+    rateBucket(`google-start:${req.ip}`, 12);
+    assert(google.enabled, 503, 'Google sign-in is not configured on this server.', 'GOOGLE_NOT_CONFIGURED');
+    const { intent } = z.object({ intent: z.enum(['signin', 'link']).default('signin') }).parse(req.body || {});
+    const current = intent === 'link' ? session(req) : null;
+    assert(intent !== 'link' || (current && current.status === 'active'), 401, 'Sign in before connecting Google.');
+    const flow = google.start({ intent, userId: current?.id });
+    res.cookie('trampo_oauth', flow.state, { httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production', maxAge: flow.maxAge, path: '/api/auth/google' });
+    res.json({ url: flow.url });
+  }));
+  app.get('/api/auth/google/callback', route(async (req, res) => {
+    const cookieState = (req.headers.cookie || '').split(';').map(s => s.trim()).find(s => s.startsWith('trampo_oauth='))?.slice('trampo_oauth='.length);
+    res.clearCookie('trampo_oauth', { path: '/api/auth/google' });
+    try {
+      assert(!req.query.error, 400, 'Google sign-in was cancelled.');
+      const result = await google.finish({ state: req.query.state, cookieState, code: req.query.code });
+      const identity = result.identity;
+      let uid, outcome = 'connected';
+      transaction(db, () => {
+        const linked = db.prepare('SELECT * FROM users WHERE google_subject=?').get(identity.subject);
+        if (result.intent === 'link') {
+          const target = user(db, result.userId);
+          assert(target && target.status === 'active', 403, 'This account is unavailable.');
+          assert(!linked || linked.id === target.id, 409, 'That Google account is already connected to another Trampo account.');
+          db.prepare('UPDATE users SET google_subject=?,email=?,email_verified=1,avatar_url=CASE WHEN avatar_url IS NULL OR avatar_url=\'\' THEN ? ELSE avatar_url END,updated_at=? WHERE id=?')
+            .run(identity.subject, identity.email, identity.avatarUrl || null, Date.now(), target.id);
+          uid = target.id; outcome = 'linked';
+        } else if (linked) {
+          assert(linked.status === 'active', 403, 'This account is suspended. Contact Trampo operations.');
+          uid = linked.id;
+          db.prepare('UPDATE users SET email=?,email_verified=1,updated_at=? WHERE id=?').run(identity.email, Date.now(), uid);
+        } else {
+          // Never merge by email or elevate a role from an OAuth claim. New Google
+          // identities are passengers; an existing user must explicitly link.
+          uid = id();
+          db.prepare('INSERT INTO users(id,name,phone,password_hash,role,account_type,email,email_verified,google_subject,avatar_url,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)')
+            .run(uid, identity.name, null, `!google-only:${randomBytes(24).toString('hex')}`, 'passenger', 'passenger', identity.email, 1, identity.subject, identity.avatarUrl || null, Date.now(), Date.now());
+          outcome = 'created';
+        }
+        event(db, null, uid, outcome === 'created' ? 'google_account_created' : 'google_account_connected');
+      });
+      setSession(res, uid);
+      res.redirect(`/?google=${outcome}#profile`);
+    } catch {
+      res.redirect('/?google=failed#profile');
+    }
   }));
   app.get('/api/bootstrap', auth, route((req, res) => {
     const u = req.user, current = activeTrip(db, u.id), ownFix = fix(db, u.id);
@@ -174,8 +229,65 @@ export function createBackend(options = {}) {
       trips: db.prepare('SELECT * FROM trips ORDER BY created_at DESC LIMIT 100').all().map(t => serializeTrip(t, u.id)),
       stats: { drivers: db.prepare('SELECT COUNT(*) n FROM drivers').get().n, approved: db.prepare("SELECT COUNT(*) n FROM drivers WHERE status='approved'").get().n, pending: db.prepare("SELECT COUNT(*) n FROM drivers WHERE status='pending'").get().n, active: db.prepare("SELECT COUNT(*) n FROM trips WHERE status IN ('assigned','in_progress')").get().n, completed: db.prepare("SELECT COUNT(*) n FROM trips WHERE status='completed'").get().n, openAlerts: db.prepare("SELECT COUNT(*) n FROM alerts WHERE status='open'").get().n },
     } : null;
-    res.json({ user: publicUser(u), driver: u.role === 'driver' ? driver(db, u.id) : null, demo, night: night(), nightPreview: !!setting(db, 'nightPreview', false), office: OFFICE,
+    res.json({ user: publicUser(u), profile: userProfile(db, u), googleSignIn: google.enabled, driver: u.role === 'driver' ? driver(db, u.id) : null, demo, night: night(), nightPreview: !!setting(db, 'nightPreview', false), office: OFFICE,
       location: ownFix, activeTrip: serializeTrip(current, u.id), trips, upcoming: trips.filter(t => t.status === 'scheduled'), nearby, offers, contacts, operations, serverTime: Date.now() });
+  }));
+  const vehicleSchema = z.object({ vehicleType: z.enum(['boda', 'comfort', 'vip']), plate: z.string().trim().min(4).max(16), model: z.string().trim().min(2).max(60), color: z.string().trim().min(2).max(30), permitRef: z.string().trim().min(4).max(80), insuranceRef: z.string().trim().min(4).max(80) }).strict();
+  const profileSchema = z.object({ name: z.string().trim().min(2).max(80), phone: phoneSchema, city: z.string().trim().min(2).max(80), bio: z.string().trim().max(240).default(''), preferredService: z.enum(['boda', 'comfort', 'vip']).nullable().optional(), accessibilityNote: z.string().trim().max(240).optional(), jobTitle: z.string().trim().max(80).optional(), department: z.string().trim().max(80).optional(), removePhoto: z.boolean().optional(), vehicle: vehicleSchema.optional() }).strict();
+  app.get('/api/profile', auth, route((req, res) => res.json({ profile: userProfile(db, req.user) })));
+  app.patch('/api/profile', auth, route((req, res) => {
+    rateBucket(`profile:${req.user.id}`, 20);
+    const input = profileSchema.parse(req.body), u = req.user, d = u.role === 'driver' ? driver(db, u.id) : null;
+    assert(!input.vehicle || d, 400, 'Vehicle details belong to a driver or rider profile.');
+    assert(!input.jobTitle && !input.department || u.role === 'admin', 400, 'Staff details belong to an admin profile.');
+    assert(!input.preferredService && !input.accessibilityNote || u.role === 'passenger', 400, 'Ride preferences belong to a passenger profile.');
+    const duplicate = db.prepare('SELECT id FROM users WHERE phone=? AND id!=?').get(input.phone, u.id);
+    assert(!duplicate, 409, 'Another account already uses this phone number.');
+    const changedVehicle = input.vehicle && d && ['vehicleType', 'plate', 'model', 'color', 'permitRef', 'insuranceRef'].some(key => {
+      const old = { vehicleType: d.vehicle_type, plate: d.plate, model: d.model, color: d.color, permitRef: d.permit_ref, insuranceRef: d.insurance_ref }[key];
+      const next = key === 'plate' ? input.vehicle[key].toUpperCase() : input.vehicle[key];
+      return old !== next;
+    });
+    assert(!changedVehicle || !activeTrip(db, u.id), 409, 'Finish your active trip before changing registered vehicle details.');
+    const phoneChanged = input.phone !== u.phone;
+    transaction(db, () => {
+      db.prepare(`UPDATE users SET name=?,phone=?,phone_verified=?,city=?,bio=?,preferred_service=?,accessibility_note=?,job_title=?,department=?,avatar_url=CASE WHEN ? THEN NULL ELSE avatar_url END,account_type=?,updated_at=? WHERE id=?`)
+        .run(input.name, input.phone, phoneChanged ? +demo : u.phone_verified, input.city, input.bio,
+          u.role === 'passenger' ? input.preferredService || null : null, u.role === 'passenger' ? input.accessibilityNote || '' : '',
+          u.role === 'admin' ? input.jobTitle || '' : '', u.role === 'admin' ? input.department || '' : '',
+          +(!!input.removePhoto), input.vehicle ? accountType('driver', input.vehicle.vehicleType) : u.account_type, Date.now(), u.id);
+      if (d && input.vehicle) {
+        const v = input.vehicle;
+        db.prepare('UPDATE drivers SET vehicle_type=?,plate=?,model=?,color=?,district=?,permit_ref=?,insurance_ref=? WHERE user_id=?')
+          .run(v.vehicleType, v.plate.toUpperCase(), v.model, v.color, input.city, v.permitRef, v.insuranceRef, u.id);
+        if (changedVehicle) db.prepare("UPDATE drivers SET status='pending',online=0,shift_check_at=NULL,reviewed_at=NULL,review_note='Vehicle or permit details changed; operations re-review required.' WHERE user_id=?").run(u.id);
+      }
+      event(db, null, u.id, 'profile_updated', { vehicleChanged: !!changedVehicle, phoneChanged });
+    });
+    if (changedVehicle) refresh();
+    res.json({ profile: userProfile(db, user(db, u.id)), reviewRequired: !!changedVehicle });
+  }));
+  app.get('/api/admin/profiles', admin, route((req, res) => {
+    const query = z.object({ kind: z.enum(['all', 'admin', 'car_driver', 'motorbike_rider', 'passenger']).default('all'), q: z.string().trim().max(80).default('') }).parse(req.query);
+    const rows = db.prepare('SELECT * FROM users ORDER BY created_at DESC LIMIT 500').all();
+    const profiles = rows.map(u => userProfile(db, u)).filter(p => (query.kind === 'all' || p.accountType === query.kind) && (!query.q || `${p.name} ${p.email} ${p.phone} ${p.city} ${p.driver?.plate || ''}`.toLowerCase().includes(query.q.toLowerCase())));
+    const counts = Object.fromEntries(['admin', 'car_driver', 'motorbike_rider', 'passenger'].map(kind => [kind, rows.filter(u => u.account_type === kind).length]));
+    res.json({ profiles, counts, total: rows.length });
+  }));
+  app.post('/api/admin/profiles/:id/status', admin, route((req, res) => {
+    const input = z.object({ status: z.enum(['active', 'suspended']), reason: z.string().trim().min(3).max(240) }).strict().parse(req.body);
+    const target = user(db, req.params.id);
+    assert(target, 404, 'Profile not found.'); assert(target.role !== 'admin', 403, 'Admin access is managed on the server, not through profile suspension.');
+    assert(target.id !== req.user.id, 400, 'You cannot suspend your own account.');
+    assert(input.status !== 'suspended' || !activeTrip(db, target.id), 409, 'Finish this user’s active trip before suspension.');
+    db.prepare('UPDATE users SET status=?,updated_at=? WHERE id=?').run(input.status, Date.now(), target.id);
+    if (input.status === 'suspended') {
+      db.prepare('DELETE FROM sessions WHERE user_id=?').run(target.id);
+      db.prepare('UPDATE drivers SET online=0 WHERE user_id=?').run(target.id);
+      for (const ws of wss.clients) if (ws.userId === target.id) ws.close(1008, 'Account suspended');
+    }
+    event(db, null, req.user.id, 'account_status_changed', { targetId: target.id, status: input.status, reason: input.reason }); refresh();
+    res.json({ profile: userProfile(db, user(db, target.id)) });
   }));
   app.post('/api/location', auth, route((req, res) => {
     const input = fixSchema.parse(req.body);
@@ -193,6 +305,7 @@ export function createBackend(options = {}) {
   app.post('/api/trips', auth, route((req, res) => {
     rateBucket(`book:${req.user.id}`, 10);
     assert(req.user.role === 'passenger', 403, 'Use a passenger account to book a ride.');
+    assert(req.user.phone, 409, 'Add your Uganda mobile number in My profile before booking.');
     assert(demo || req.user.phone_verified, 403, 'Verify your phone before booking.');
     const input = z.object({ pickup: positionSchema, dropoff: positionSchema, service: z.enum(['boda', 'comfort', 'vip']), payment: z.enum(['cash', 'mobile_money']), note: z.string().trim().max(240).default(''), scheduledAt: z.number().int().optional() }).parse(req.body);
     assert(inUganda(input.pickup) && inUganda(input.dropoff), 400, 'Pickup and destination must be in Uganda.');
@@ -207,7 +320,7 @@ export function createBackend(options = {}) {
     refresh(); res.status(201).json({ trip: serializeTrip(trip(db, tid), req.user.id) });
   }));
   const tripAuth = route((req, res, next) => {
-    req.user = session(req); assert(req.user, 401, 'Please sign in.');
+    req.user = session(req); assert(req.user, 401, 'Please sign in.'); assert(req.user.status === 'active', 403, 'This account is suspended.');
     req.trip = trip(db, req.params.id); assert(req.trip, 404, 'Trip not found.');
     assert(participant(req.trip, req.user.id) || req.user.role === 'admin', 403, 'You are not a participant in this trip.'); next();
   });
@@ -281,7 +394,7 @@ export function createBackend(options = {}) {
     assert(!db.prepare('SELECT id FROM users WHERE phone=?').get(input.phone), 409, 'This phone number is already registered. Sign in instead.');
     const uid = id();
     transaction(db, () => {
-      db.prepare('INSERT INTO users(id,name,phone,password_hash,role,is_demo,phone_verified,created_at) VALUES(?,?,?,?,?,0,0,?)').run(uid, input.name, input.phone, hashPassword(input.password), 'driver', Date.now());
+      db.prepare('INSERT INTO users(id,name,phone,password_hash,role,account_type,is_demo,phone_verified,created_at) VALUES(?,?,?,?,?,?,0,0,?)').run(uid, input.name, input.phone, hashPassword(input.password), 'driver', accountType('driver', input.vehicleType), Date.now());
       db.prepare('INSERT INTO drivers(user_id,vehicle_type,plate,model,color,district,permit_ref,insurance_ref) VALUES(?,?,?,?,?,?,?,?)').run(uid, input.vehicleType, input.plate.toUpperCase(), input.model, input.color, input.district, input.permitRef, input.insuranceRef);
     });
     if (demo) { db.prepare('UPDATE users SET phone_verified=1 WHERE id=?').run(uid); setSession(res, uid); }
@@ -413,7 +526,7 @@ export function createBackend(options = {}) {
     const origin = req.headers.origin;
     let originOK = !origin;
     try { originOK ||= new URL(origin).host === req.headers.host || origin === process.env.PUBLIC_ORIGIN; } catch {}
-    if (!u || !originOK) { socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n'); socket.destroy(); return; }
+    if (!u || u.status !== 'active' || !originOK) { socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n'); socket.destroy(); return; }
     wss.handleUpgrade(req, socket, head, ws => {
       ws.userId = u.id; ws.alive = true; ws.messageCount = 0; ws.rateStart = Date.now();
       if (!clients.has(u.id)) clients.set(u.id, new Set());
@@ -486,6 +599,7 @@ export function createBackend(options = {}) {
     for (const call of db.prepare("SELECT c.* FROM calls c JOIN trips t ON t.id=c.trip_id WHERE c.status='ringing' AND c.started_at<?").all(now - 45000)) endCalls(trip(db, call.trip_id), 'no_answer');
     for (const [key, value] of limits) if (now - value.start > 120000) limits.delete(key);
     db.prepare('DELETE FROM sessions WHERE expires_at<?').run(now);
+    db.prepare('DELETE FROM oauth_flows WHERE expires_at<?').run(now);
     for (const ws of wss.clients) { if (!ws.alive) { ws.terminate(); continue; } ws.alive = false; ws.ping(); }
   }
   const timer = options.autoTick === false ? null : setInterval(tick, 2000); timer?.unref();

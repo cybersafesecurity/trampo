@@ -1,8 +1,15 @@
 export type Service = 'boda' | 'comfort' | 'vip';
-export type Page = 'ride' | 'activity' | 'safety' | 'vip' | 'drive' | 'operations';
+export type Page = 'ride' | 'activity' | 'safety' | 'vip' | 'drive' | 'operations' | 'profile';
+export type AccountType = 'admin' | 'car_driver' | 'motorbike_rider' | 'passenger';
 export type Position = { lat: number; lng: number; name?: string };
 export type Fix = Position & { accuracy: number; source: 'browser' | 'simulated'; updatedAt: number };
-export type User = { id: string; name: string; role: 'passenger' | 'driver' | 'admin'; phone: string; initials: string };
+export type User = { id: string; name: string; role: 'passenger' | 'driver' | 'admin'; accountType: AccountType; phone: string; initials: string; avatarUrl?: string };
+export type UserProfile = User & {
+  email: string; emailVerified: boolean; phoneVerified: boolean; googleLinked: boolean; hasPassword: boolean;
+  city: string; bio: string; preferredService: Service | null; accessibilityNote: string; jobTitle: string; department: string;
+  status: 'active' | 'suspended'; isDemo: boolean; createdAt: number; updatedAt: number; driver: DriverProfile | null;
+};
+export type ProfileDirectory = { profiles: UserProfile[]; counts: Record<AccountType, number>; total: number };
 export type Place = Position & { name: string; area: string };
 export type Quote = { distanceKm: number; minutes: number; fare: number; currency: string; estimate: boolean };
 export type Match = { matched: boolean; distance: number | null; threshold: number; reasons: string[]; maxAccuracy: number; maxAgeSeconds: number };
@@ -16,9 +23,9 @@ export type Trip = {
   riderConfirmedAt?: number | null; startDistance?: number; checkInDueAt?: number | null;
   events?: { type: string; detail: Record<string, unknown>; createdAt: number }[];
 };
-export type DriverProfile = { user_id: string; name: string; phone: string; status: string; online: number; vehicle_type: Service; plate: string; model: string; color: string; district: string; permit_ref: string; insurance_ref: string; rating: number; shift_check_at: number | null; is_demo: number; review_note?: string };
+export type DriverProfile = { user_id: string; name: string; phone: string; status: string; online: number; vehicle_type: Service; plate: string; model: string; color: string; district: string; permit_ref: string; insurance_ref: string; rating: number; shift_check_at: number | null; is_demo: number; review_note?: string; avatar_url?: string | null; account_type?: AccountType };
 export type Contact = { id: string; name: string; phone: string };
 export type Alert = { id: string; trip_id: string; user_id: string; userName: string; kind: string; lat: number | null; lng: number | null; location_at: number | null; status: string; note: string; created_at: number };
 export type Operations = { alerts: Alert[]; drivers: DriverProfile[]; trips: Trip[]; stats: { drivers: number; approved: number; pending: number; active: number; completed: number; openAlerts: number } };
-export type Bootstrap = { user: User; driver: DriverProfile | null; demo: boolean; night: boolean; nightPreview: boolean; office: string; location: Fix | null; activeTrip: Trip | null; trips: Trip[]; upcoming: Trip[]; nearby: { id: string; vehicleType: Service; location: Fix; isDemo: boolean }[]; offers: Trip[]; contacts: Contact[]; operations: Operations | null; serverTime: number };
+export type Bootstrap = { user: User; profile: UserProfile; googleSignIn: boolean; driver: DriverProfile | null; demo: boolean; night: boolean; nightPreview: boolean; office: string; location: Fix | null; activeTrip: Trip | null; trips: Trip[]; upcoming: Trip[]; nearby: { id: string; vehicleType: Service; location: Fix; isDemo: boolean }[]; offers: Trip[]; contacts: Contact[]; operations: Operations | null; serverTime: number };
 export type CallState = { status: 'idle' | 'calling' | 'incoming' | 'connecting' | 'connected' | 'error'; tripId?: string; callId?: string; muted?: boolean; error?: string; startedAt?: number };

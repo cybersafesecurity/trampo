@@ -2,7 +2,7 @@ name: Deploy Trampo to GitHub Pages
 
 on:
   push:
-    branches: [main, arena/8faadd25-trampo]
+    branches: [main]
   workflow_dispatch:
 
 permissions:

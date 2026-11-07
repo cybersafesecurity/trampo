@@ -1,12 +1,27 @@
 # Trampo — Your city. Your ride.
 
-An Uganda-first, responsive ride-hailing application with a working Node/SQLite backend, React interface, GPS-verified trip starts, matched-only browser audio calling, driver onboarding, operations review, VIP selection, and Night Shield safety tools.
+An Uganda-first, responsive ride-hailing application with a working Node/SQLite backend, React interface, GPS-verified trip starts, matched-only browser audio calling, role-specific profiles for admins/car drivers/motorbike riders/passengers, Google sign-in, driver onboarding, operations review, VIP selection, and Night Shield safety tools.
 
 **Head office:** Plot 14 Martyrs Drive, Ntinda Ministers Village, Kampala, Uganda.
 
 > **Interactive prototype, not a licensed transport or emergency service.** The default fleet is simulated. No real ride, payment, background check, SMS, or emergency responder is dispatched. Browser GPS and peer-to-peer audio are real when permissions, HTTPS, and network conditions allow.
 
-## Run locally
+## Live backend (Supabase, no demo)
+
+A real, account-backed deployment is included alongside the demo: **Supabase Auth
+(email + password), Postgres, an Edge Function, Realtime call signalling, and pg_cron.**
+It has no demo accounts, no simulated GPS, and no auto-dispatch. Build and serve it with:
+
+```bash
+cp .env.live.example .env.live   # fill in the public Supabase URL + publishable key
+npm run build:live && npm run preview:live   # serves dist-live/ on 0.0.0.0:3000
+```
+
+See **[docs/SUPABASE_LIVE.md](docs/SUPABASE_LIVE.md)** for setup, the server-enforced
+GPS/PIN start gate, matched-only calling, driver approval, the first admin account, and
+the remaining production limitations (SMTP, OTP, KYC, payments, TURN, emergency response).
+
+## Run locally (demo)
 
 Requires **Node.js 22.13+** (the built-in `node:sqlite` module is experimental on Node 22) and npm.
 
@@ -25,6 +40,12 @@ DEMO_MODE=false NODE_ENV=production PUBLIC_ORIGIN=https://your-domain.example np
 ```
 
 This serves the built frontend and API from one origin. It deliberately disables demo accounts, simulated GPS, and unverified-phone login. **Do not launch commercially yet:** see [the production checklist](docs/PRODUCTION_CHECKLIST.md). Use HTTPS and a persistent database volume. Configure the exact public origin behind a reverse proxy.
+
+## Profiles & Google sign-in
+
+Open **My profile** from the sidebar or avatar. Admins get staff details and a user directory; car drivers and motorbike riders get vehicle/partner profiles; passengers get ride preferences. Vehicle changes require operations re-review. Google sign-in uses a secure server-side OAuth flow and creates passenger accounts only.
+
+To enable Google, copy `.env.example` to `.env`, set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and the exact `PUBLIC_ORIGIN`, then register `<origin>/api/auth/google/callback` as the Google Web OAuth redirect URI. Restart the server. Without credentials the button is honestly disabled. See [docs/PROFILES_AND_GOOGLE.md](docs/PROFILES_AND_GOOGLE.md).
 
 ## GitHub Pages
 

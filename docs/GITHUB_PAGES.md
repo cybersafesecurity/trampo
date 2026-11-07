@@ -1,34 +1,56 @@
-# GitHub Pages deployment
+# GitHub Pages — live Supabase app
 
-GitHub Pages hosts static files only. It cannot run Trampo's Node/SQLite API, WebSocket signaling, server-enforced GPS gate, or real WebRTC call setup. This repository therefore includes a **browser-only Pages demo** built with `npm run build:pages`.
+Trampo is deployed to GitHub Pages as a static frontend that talks **directly to
+Supabase** (Auth, Postgres, Realtime, and the `trampo-api` Edge Function). There is
+no demo mode and no Node server in this deployment — the browser calls your
+Supabase project over HTTPS.
 
-## What the Pages site includes
+Public URL: **https://cybersafesecurity.github.io/trampo/**
 
-- The full Trampo responsive UI: booking, VIP, safety centre, driver hub, operations, activity, and shared-trip view.
-- A localStorage-backed demo state: simulated fleet, trip requests, GPS/PIN demo flow, driver registration/review, contacts, alerts, ratings, and receipts.
-- Clear labelling that the site is a static demo. Calling buttons explain that live calling requires the full backend.
-- Hash-based share links that work in the same browser profile where they were created. They are not public cross-device tracking links.
+## How it builds
 
-## Deploy
+The workflow `.github/workflows/pages.yml` runs on pushes to `main` (and the
+active Arena branch) and on demand via **Actions → Deploy Trampo to GitHub Pages
+→ Run workflow**. It:
 
-1. Push this repository to GitHub.
-2. In **Settings → Pages**, set **Source** to **GitHub Actions**.
-3. The included workflow `.github/workflows/pages.yml` builds `dist` with `npm run build:pages` and deploys it.
-4. For a project repository named `trampo`, the expected URL is `https://<owner>.github.io/trampo/`.
+1. `npm ci`
+2. `npm run build:pages:live` — `vite build --mode live --base=./` into `dist/`.
+   The relative base (`./`) makes the assets load correctly under the `/trampo/`
+   subpath.
+3. Uploads `dist/` and deploys with `actions/deploy-pages`.
 
-The workflow triggers on pushes to `main` and the current Arena working branch, and can also be run manually from the Actions tab.
+The build injects only **browser-safe public values** (set in the workflow `env`):
 
-If the repository is private, GitHub Pages availability depends on the account/organization plan. Making the repository public is a visibility decision and should be done deliberately by the owner.
-
-## Local static preview
-
-```bash
-npm run build:pages
-npm run preview:pages
+```text
+VITE_TRAMPO_BACKEND=supabase
+VITE_SUPABASE_URL=https://<project-ref>.supabase.co
+VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_…   # public, protected by RLS
 ```
 
-Open the printed local URL. The build uses a relative base path so it can be served from a repository subpath.
+The publishable key is safe to ship to browsers — all data access is gated by
+row-level security and the Edge Function. No service-role or secret key is ever
+placed in the frontend or the workflow.
 
-## Full application
+## Supabase configuration for the Pages origin
 
-For real backend behavior, run `npm run dev` or deploy the Node server separately. The Pages site is a showcase/demo, not the production ride-hailing service.
+For auth and API calls to work from `https://cybersafesecurity.github.io`, the
+project must allow that origin:
+
+- **Auth → URL configuration:** `https://cybersafesecurity.github.io/trampo/**`
+  (and the origin `/**`) in the redirect allow-list; site URL set to the Pages URL.
+- **Edge Function secret `TRAMPO_ALLOWED_ORIGINS`:** includes
+  `https://cybersafesecurity.github.io` so CORS preflight/responses succeed.
+
+Both are already configured for this project. If you fork or move the deployment,
+add the new origin to both places.
+
+## Notes
+
+- GitHub Pages serves over HTTPS, which geolocation, the service worker-less
+  realtime client, and WebRTC calling all require.
+- Email sign-up requires confirmation; password-reset and confirmation links
+  return to the Pages URL. Configure custom SMTP before inviting real users (the
+  built-in Supabase email service is heavily rate-limited).
+- To run the older browser-local demo instead, use `npm run build:pages`
+  (mode `pages`) — it is kept for offline evaluation but is **not** what the
+  workflow deploys.

@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode, type ButtonHTMLAttributes } from 'react';
+import { useEffect, useRef, useState, type ReactNode, type ButtonHTMLAttributes } from 'react';
 import { ArrowRight, Bike, CarFront, Check, Crown, LoaderCircle, ShieldCheck, X, AlertCircle, Info } from 'lucide-react';
 import type { Service } from '../types';
 import { asset } from '../lib';
@@ -8,7 +8,12 @@ export function Button({ children, className = '', variant = 'primary', loading,
   return <button className={`btn btn-${variant} ${className}`} {...props} disabled={props.disabled || loading}>{loading && <LoaderCircle size={17} className="spin" />}{children}</button>;
 }
 export function VehicleIcon({ service, size = 25 }: { service: Service; size?: number }) { return service === 'boda' ? <Bike size={size} strokeWidth={1.65} /> : service === 'vip' ? <Crown size={size} strokeWidth={1.65} /> : <CarFront size={size} strokeWidth={1.65} />; }
-export function Avatar({ name, size = '', className = '' }: { name: string; size?: string; className?: string }) { return <span className={`avatar ${size} ${className}`}>{name.split(' ').map(s => s[0]).slice(0, 2).join('')}</span>; }
+export function Avatar({ name, size = '', className = '', src }: { name: string; size?: string; className?: string; src?: string }) {
+  const [failed, setFailed] = useState(false);
+  useEffect(() => setFailed(false), [src]);
+  const initials = name.trim().split(/\s+/).map(s => s[0]).slice(0, 2).join('').toUpperCase() || 'T';
+  return <span className={`avatar ${size} ${className}`}>{src && /^https:\/\//i.test(src) && !failed ? <img src={src} alt={`${name} profile photo`} referrerPolicy="no-referrer" onError={() => setFailed(true)} /> : initials}</span>;
+}
 export function Badge({ children, tone = 'green' }: { children: ReactNode; tone?: string }) { return <span className={`badge badge-${tone}`}>{children}</span>; }
 export function Modal({ title, children, onClose, wide = false }: { title: string; children: ReactNode; onClose: () => void; wide?: boolean }) {
   const ref = useRef<HTMLDivElement>(null);

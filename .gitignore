@@ -1,8 +1,10 @@
 node_modules/
 dist/
+dist-live/
 .env
 .env.*
 !.env.example
+!.env.live.example
 data/
 *.sqlite*
 test-results/

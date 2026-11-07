@@ -32,6 +32,7 @@ test('demo ride completes the full GPS + passenger + PIN flow', async ({ page })
   await page.getByRole('button', { name: /Complete trip · UGX/ }).click();
   await expect(page.getByRole('heading', { name: 'Ready for your next journey.' })).toBeVisible();
   await page.locator('.sidebar-profile').click();
+  await page.getByRole('button', { name: 'Account options' }).click();
   await page.getByRole('button', { name: 'Passenger experience' }).click();
   await page.getByRole('button', { name: 'My trips', exact: true }).click();
   await expect(page.getByRole('article').getByText('Completed', { exact: true })).toBeVisible();

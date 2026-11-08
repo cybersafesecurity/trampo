@@ -46,3 +46,15 @@ test('Uganda phone numbers normalize consistently', () => {
   assert.equal(normalizePhone('+256 (0)772-123-456'.replace('(0)', '')), '+256772123456');
   assert.throws(() => normalizePhone('+14155551212'));
 });
+import { dispatchCandidates } from '../server/domain.js';
+test('dispatch ranks available drivers by proximity with no 100-mile cutoff', () => {
+  const base = { status: 'approved', online: true, account_status: 'active', busy: false, vehicle_type: 'boda', shift_check_at: now, rating: 4.8, location: fix() };
+  const near = { ...base, user_id: 'near', location: fix(.001) };
+  const far = { ...base, user_id: 'far', location: fix(1.45) }; // ~161 km / 100 miles
+  assert.deepEqual(dispatchCandidates([far, near], { ...pickup, service: 'boda' }, now).map(d => d.user_id), ['near', 'far']);
+  const sole = dispatchCandidates([far], { ...pickup, service: 'boda' }, now);
+  assert.equal(sole.length, 1); assert.equal(sole[0].user_id, 'far'); assert.ok(sole[0].dispatchDistance > 160000);
+  assert.deepEqual(dispatchCandidates([{ ...far, online: false }, { ...far, busy: true }, { ...far, status: 'pending' }, { ...far, account_status: 'suspended' }, { ...far, vehicle_type: 'comfort' }, { ...far, shift_check_at: now - 43200001 }, { ...far, location: fix(0, { updatedAt: now - 30001 }) }, { ...far, location: fix(0, { accuracy: 51 }) }, { ...far, location: fix(0, { lat: 51.5, lng: -.1 }) }], { ...pickup, service: 'boda' }, now), []);
+  const tiedA = { ...near, user_id: 'a', rating: 4.9 }, tiedB = { ...near, user_id: 'b', rating: 4.7 };
+  assert.deepEqual(dispatchCandidates([tiedB, tiedA], { ...pickup, service: 'boda' }, now).map(d => d.user_id), ['a', 'b']);
+});

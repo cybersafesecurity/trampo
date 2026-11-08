@@ -7,7 +7,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { z } from 'zod';
 import { openStore, hashPassword, checkPassword, user, userProfile, driver, fix, saveFix, event, activeTrip, trip, setting, setSetting, transaction, accountType } from './store.js';
 import { createGoogleAuth } from './google.js';
-import { inUganda, distanceMeters, isNight, quote, gpsMatch, interpolate, normalizePhone, publicUser, SERVICES, OFFICE } from './domain.js';
+import { inUganda, distanceMeters, isNight, quote, gpsMatch, dispatchCandidates, interpolate, normalizePhone, publicUser, SERVICES, OFFICE } from './domain.js';
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const hash = value => createHash('sha256').update(value).digest('hex');
@@ -116,10 +116,9 @@ export function createBackend(options = {}) {
     if (demo) setSetting(db, `pin:${t.id}`, pin);
   }
   function availableDrivers(service, pickup) {
-    return db.prepare("SELECT d.user_id FROM drivers d JOIN users u ON u.id=d.user_id WHERE d.status='approved' AND d.online=1 AND d.vehicle_type=?").all(service)
-      .map(row => ({ ...driver(db, row.user_id), location: fix(db, row.user_id) }))
-      .filter(d => d.location && Date.now() - d.location.updatedAt < 30000 && distanceMeters(d.location, pickup) <= 8000)
-      .sort((a, b) => distanceMeters(a.location, pickup) - distanceMeters(b.location, pickup));
+    const rows = db.prepare("SELECT d.user_id,u.status AS account_status FROM drivers d JOIN users u ON u.id=d.user_id WHERE d.status='approved' AND d.online=1 AND d.vehicle_type=?").all(service)
+      .map(row => ({ ...driver(db, row.user_id), account_status: row.account_status, location: fix(db, row.user_id), busy: !!activeTrip(db, row.user_id) }));
+    return dispatchCandidates(rows, { ...pickup, service });
   }
   function assign(t, d) {
     transaction(db, () => {
@@ -129,7 +128,7 @@ export function createBackend(options = {}) {
       const fresh = driver(db, d.user_id);
       assert(fresh.online && fresh.status === 'approved', 409, 'Driver is no longer available.');
       db.prepare('UPDATE trips SET driver_id=?,status=?,assigned_at=?,night_mode=?,simulated=? WHERE id=?').run(d.user_id, 'assigned', Date.now(), +night(), +(!!user(db, t.rider_id).is_demo && !!d.is_demo), t.id);
-      event(db, t.id, d.user_id, 'driver_matched', { name: d.name });
+      event(db, t.id, d.user_id, 'driver_matched', { name: d.name, distanceMeters: Math.round(distanceMeters(fix(db, d.user_id), json(t.pickup))), policy: 'availability_then_proximity', maxDistance: null });
     });
     refresh();
   }
@@ -221,7 +220,7 @@ export function createBackend(options = {}) {
       if (!loc || Date.now() - loc.updatedAt > 30000) return null;
       return { id: d.user_id, vehicleType: d.vehicle_type, location: loc, isDemo: !!d.is_demo };
     }).filter(Boolean);
-    const offers = u.role === 'driver' && driver(db, u.id)?.status === 'approved' ? db.prepare("SELECT * FROM trips WHERE status='searching' AND service=? AND scheduled_at IS NULL ORDER BY created_at DESC LIMIT 10").all(driver(db, u.id).vehicle_type).filter(t => ownFix && distanceMeters(ownFix, json(t.pickup)) < 8000).map(t => serializeTrip(t, u.id)) : [];
+    const offers = u.role === 'driver' && driver(db, u.id)?.status === 'approved' ? db.prepare("SELECT * FROM trips WHERE status='searching' AND service=? AND scheduled_at IS NULL ORDER BY created_at DESC LIMIT 10").all(driver(db, u.id).vehicle_type).filter(t => ownFix && availableDrivers(t.service, json(t.pickup)).some(d => d.user_id === u.id)).map(t => serializeTrip(t, u.id)) : [];
     const contacts = db.prepare('SELECT id,name,phone FROM contacts WHERE user_id=?').all(u.id);
     const operations = u.role === 'admin' ? {
       alerts: db.prepare('SELECT a.*,u.name AS userName FROM alerts a JOIN users u ON u.id=a.user_id ORDER BY a.created_at DESC LIMIT 100').all(),
@@ -330,7 +329,7 @@ export function createBackend(options = {}) {
     assert(t, 404, 'Trip not found.'); assert(d?.status === 'approved' && d.online, 403, 'Get approved and go online first.');
     assert(d.vehicle_type === t.service, 409, 'This request needs a different vehicle class.');
     assert(!activeTrip(db, req.user.id), 409, 'You already have an active trip.');
-    assert(fix(db, d.user_id) && Date.now() - fix(db, d.user_id).updatedAt < 30000 && distanceMeters(fix(db, d.user_id), json(t.pickup)) <= 8000, 400, 'This pickup is outside your 8 km dispatch radius, or your GPS needs refreshing.');
+    assert(availableDrivers(t.service, json(t.pickup)).some(candidate => candidate.user_id === d.user_id), 400, 'Your GPS, shift checklist or availability needs refreshing before accepting this request.');
     assign(t, d); res.json({ trip: serializeTrip(trip(db, t.id), req.user.id) });
   }));
   app.post('/api/trips/:id/cancel', tripAuth, route((req, res) => {

@@ -10,15 +10,15 @@ A start request is accepted only when all of these hold:
 
 1. The caller is the assigned driver and the trip is `assigned`.
 2. The four-digit trip PIN matches a salted scrypt hash; attempts are limited.
-3. Testing mode: GPS freshness, accuracy, Uganda bounds for the boarding match, and proximity no longer block start. Haversine separation is recorded when both fixes exist, but is not capped or required.
+3. Both phones report fresh GPS (≤15 seconds old), accuracy ≤50 m, inside Uganda, and no more than 50 m apart. The same fixed gate applies day and night and is checked again at start.
 5. The passenger confirmed the vehicle within the previous 120 seconds; night trips also require a well-lit pickup acknowledgement.
 6. The driver's shift checklist is less than 12 hours old.
 
-The demo shortcut for passenger confirmation is unavailable outside explicitly simulated demo trips; it no longer requires a GPS match in testing mode. Production mode rejects all simulated location reports. Nevertheless, a malicious client can lie about GPS/source/accuracy; device attestation and anti-spoofing are required before launch.
+The demo shortcut for passenger confirmation is unavailable outside explicitly simulated demo trips and also requires a GPS match. Production mode rejects all simulated location reports. Nevertheless, a malicious client can lie about GPS/source/accuracy; device attestation and anti-spoofing are required before launch.
 
 ## Location and map honesty
 
-The included map is an interactive, illustrated Kampala/Uganda overview, not a road map or navigation engine. Saved place coordinates are approximate demo locations. Fares use a straight-line distance multiplier and time estimate, not live road routing, traffic, tolls, or metered distance. The UI labels these estimates.
+The live map uses Leaflet with OpenStreetMap tiles, showing pickup, stops, destination and the latest driver fix. If tiles fail it falls back to a labelled illustrated overview. It is not a road-routing or navigation engine. Saved place coordinates are approximate demo locations. Fares use a straight-line distance multiplier and time estimate, not live road routing, traffic, tolls, or metered distance. The UI labels these estimates.
 
 A production map/routing provider must supply road geometry, geocoding, ETA, route deviation, and metered fare inputs. Uganda-wide service also requires real supply outside Kampala; a nationwide destination list is not evidence of nationwide driver coverage.
 

@@ -1,5 +1,5 @@
-// Deterministic, non-billable Google Maps browser tests. The test key is only used to
-// exercise the loader; Playwright intercepts Google's script and geocoder responses.
+// Deterministic, non-billable map tests. The test key only exercises the optional
+// Google geocoder; Playwright intercepts Google and OpenStreetMap tile traffic.
 import { spawnSync } from 'node:child_process';
 const env = { ...process.env, VITE_GOOGLE_MAPS_API_KEY: 'test-only-browser-key', TRAMPO_MAPS_E2E: 'true' };
 const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';

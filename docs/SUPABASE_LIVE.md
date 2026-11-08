@@ -31,7 +31,7 @@ Express/SQLite server (`npm run dev`) remains a separate, clearly-labelled demo.
 
 ## What is enforced server-side
 
-- **Boarding start gate (testing mode).** GPS distance, freshness and accuracy checks
+- **Boarding start gate.** Fixed 50 m proximity, freshness and accuracy checks
   are disabled so a matched passenger/driver can verify and start without a pending GPS
   match message. The passenger must still confirm boarding within 2 minutes, the driver
   must enter the 4-digit PIN, and the driver's shift checklist must be <12 h old.

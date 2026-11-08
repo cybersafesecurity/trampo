@@ -12,10 +12,11 @@ export type UserProfile = User & {
 export type ProfileDirectory = { profiles: UserProfile[]; counts: Record<AccountType, number>; total: number };
 export type Place = Position & { name: string; area: string };
 export type Quote = { distanceKm: number; minutes: number; fare: number; currency: string; estimate: boolean };
-export type Match = { matched: boolean; distance: number | null; threshold: number | null; reasons: string[]; maxAccuracy: number | null; maxAgeSeconds: number | null; testingBypass?: boolean };
+export type Match = { matched: boolean; distance: number | null; threshold: number | null; reasons: string[]; maxAccuracy: number | null; maxAgeSeconds: number | null };
+export type TripStop = Position & { id: string; name: string; area?: string; status: 'pending' | 'arrived'; addedBy?: string; addedAt: number; arrivedAt: number | null };
 export type Trip = {
   id: string; status: 'scheduled' | 'searching' | 'assigned' | 'in_progress' | 'completed' | 'cancelled'; service: Service;
-  pickup: Position; dropoff: Position; fare: number; finalFare: number | null; distanceKm: number; minutes: number; payment: string; note: string;
+  pickup: Position; dropoff: Position; stops: TripStop[]; fare: number; finalFare: number | null; distanceKm: number; minutes: number; payment: string; note: string;
   createdAt: number; scheduledAt: number | null; assignedAt: number | null; startedAt: number | null; endedAt: number | null;
   night: boolean; simulated: boolean; rating: number | null; cancelReason: string | null;
   rider: User; driver: (User & { plate: string; model: string; color: string; vehicleType: Service; rating: number; isDemo: boolean }) | null;

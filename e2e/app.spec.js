@@ -5,6 +5,10 @@ test.beforeEach(async ({ request }) => {
   await request.post('/api/demo/session', { data: { role: 'passenger' }, headers });
   await request.post('/api/location', { data: { lat: 0.3354, lng: 32.5769, accuracy: 8, source: 'simulated' }, headers });
   await request.post('/api/settings/night-preview', { data: { enabled: false }, headers });
+  const state = await (await request.get('/api/bootstrap', { headers })).json();
+  if (state.activeTrip && ['searching', 'assigned', 'in_progress'].includes(state.activeTrip.status)) {
+    await request.post(`/api/trips/${state.activeTrip.id}/cancel`, { data: { reason: 'Test cleanup' }, headers });
+  }
 });
 
 test('demo ride completes the full GPS + passenger + PIN flow', async ({ page }) => {
@@ -17,7 +21,7 @@ test('demo ride completes the full GPS + passenger + PIN flow', async ({ page })
   await expect(page.getByRole('heading', { name: 'Musa Kato' })).toBeVisible();
   await page.locator('.demo-tools summary').click();
   await page.getByRole('button', { name: 'Simulate driver arrival' }).click();
-  await expect(page.locator('.gps-check strong', { hasText: 'Boarding verification ready' })).toBeVisible();
+  await expect(page.locator('.gps-check strong', { hasText: 'GPS match ready' })).toBeVisible();
   const nightCheck = page.getByLabel('I’m at a well-lit pickup point.');
   if (await nightCheck.isVisible()) await nightCheck.check();
   await page.getByRole('button', { name: 'I’m in the right vehicle' }).click();
@@ -40,6 +44,29 @@ test('demo ride completes the full GPS + passenger + PIN flow', async ({ page })
   await page.getByRole('button', { name: 'Submit rating' }).click();
   await expect(page.getByText('Thanks for sharing. Your rating is saved.')).toBeVisible();
   expect(errors).toEqual([]);
+});
+
+test('passenger can add/remove a stop and share a live trip link', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Garden City', exact: true }).click();
+  await page.getByRole('button', { name: 'Request Trampo Boda' }).click();
+  await expect(page.getByRole('heading', { name: /Musa Kato|David Okello|Isaac Ssemakula/ })).toBeVisible();
+  await page.locator('.demo-tools summary').click();
+  await page.getByRole('button', { name: 'Simulate driver arrival' }).click();
+  await expect(page.locator('.gps-check strong', { hasText: 'GPS match ready' })).toBeVisible();
+  await page.getByRole('button', { name: 'Add stop' }).click();
+  await page.getByRole('button', { name: 'Have coordinates? Enter a custom location' }).click();
+  await page.getByLabel('Location name').fill('Browser Test Stop');
+  await page.getByLabel('Latitude').fill('0.3454');
+  await page.getByLabel('Longitude').fill('32.5769');
+  await page.getByRole('button', { name: 'Use these coordinates' }).click();
+  await expect(page.locator('.stop-list')).toContainText('Browser Test Stop');
+  await page.getByRole('button', { name: 'Share live trip' }).click();
+  await expect(page.getByRole('dialog', { name: 'Share this journey' })).toBeVisible();
+  await expect(page.getByLabel('Shared trip link')).toHaveValue(/#\/share\//);
+  await page.getByRole('button', { name: 'Close dialog' }).click();
+  await page.getByRole('button', { name: 'Remove stop Browser Test Stop' }).click();
+  await expect(page.locator('.stop-list')).not.toContainText('Browser Test Stop');
 });
 
 test('mobile navigation, destination search and night safety tools work', async ({ page }) => {

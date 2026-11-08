@@ -36,7 +36,7 @@ test('authentication, CSRF protection, Uganda bounds and fare quotes', async t =
   await client('POST', '/api/location', { lat: 51.5, lng: -.1, accuracy: 8, source: 'browser' }, 400);
   const quotes = await client('POST', '/api/quotes', { pickup, dropoff }); assert.ok(quotes.vip.fare > quotes.comfort.fare && quotes.comfort.fare > quotes.boda.fare);
 });
-test('complete trip enforces PIN, passenger confirmation, calling window and rating with GPS boarding gates disabled', async t => {
+test('complete trip enforces GPS match, PIN, passenger confirmation, stops, calling window and rating', async t => {
   const { backend, client } = await setup(t), rider = client(), driver = client(), admin = client(), stranger = client();
   await passenger(rider);
   let trip = await requestRide(rider);
@@ -48,20 +48,31 @@ test('complete trip enforces PIN, passenger confirmation, calling window and rat
   trip = (await driver('POST', `/api/trips/${trip.id}/accept`, {})).trip;
   const pin = (await rider('GET', `/api/trips/${trip.id}`)).trip.pin;
   assert.match(pin, /^\d{4}$/); assert.equal(trip.pin, undefined);
-  // GPS distance/accuracy/freshness no longer block boarding in testing mode.
+  // Far/stale/inaccurate GPS blocks confirmation and start.
   await driver('POST', '/api/location', { ...pickup, lat: pickup.lat + .1, accuracy: 500, source: 'simulated' });
   saveFix(backend.db, 'demo-passenger', { ...pickup, accuracy: 500 }, 'simulated', Date.now() - 60000);
+  const blocked = await rider('POST', `/api/trips/${trip.id}/confirm`, { identityChecked: true, safePickup: true }, 409); assert.equal(blocked.code, 'GPS_NOT_MATCHED');
+  await driver('POST', `/api/trips/${trip.id}/start`, { pin }, 409);
+  await driver('POST', '/api/location', { ...pickup, accuracy: 8, source: 'simulated' });
+  await rider('POST', '/api/location', { ...pickup, accuracy: 8, source: 'simulated' });
   await driver('POST', `/api/trips/${trip.id}/start`, { pin }, 409); // Still requires passenger confirmation.
   const confirmed = await rider('POST', `/api/trips/${trip.id}/confirm`, { identityChecked: true, safePickup: true });
-  assert.equal(confirmed.match.matched, true); assert.equal(confirmed.match.testingBypass, true);
+  assert.equal(confirmed.match.matched, true); assert.equal(confirmed.match.threshold, 50);
   await driver('POST', `/api/trips/${trip.id}/start`, { pin: pin === '0000' ? '0001' : '0000' }, 400);
-  const started = await driver('POST', `/api/trips/${trip.id}/start`, { pin }); assert.equal(started.trip.status, 'in_progress'); assert.equal(started.match.threshold, null); assert.equal(started.match.testingBypass, true); assert.deepEqual(started.match.reasons, []); assert.ok(Number.isFinite(started.match.distance));
+  const started = await driver('POST', `/api/trips/${trip.id}/start`, { pin }); assert.equal(started.trip.status, 'in_progress'); assert.equal(started.match.threshold, 50); assert.deepEqual(started.match.reasons, []); assert.ok(Number.isFinite(started.match.distance));
   await driver('POST', `/api/trips/${trip.id}/start`, { pin }, 409);
   await driver('POST', `/api/trips/${trip.id}/cancel`, { reason: 'Too late' }, 409);
   const call = await rider('POST', `/api/trips/${trip.id}/call`, {}); assert.equal(call.mode, 'webrtc-p2p');
   await stranger('POST', `/api/trips/${trip.id}/call`, {}, 403);
+  const stopPlace = { lat: pickup.lat + .01, lng: pickup.lng, name: 'Test stop' };
+  const withStop = await rider('POST', `/api/trips/${trip.id}/stops`, stopPlace, 201); assert.equal(withStop.trip.stops.length, 1); assert.ok(withStop.trip.fare >= started.trip.fare);
+  await driver('POST', `/api/trips/${trip.id}/complete`, {}, 409);
+  const stopId = withStop.trip.stops[0].id;
+  await driver('POST', `/api/trips/${trip.id}/stops/${stopId}/arrive`, {}, 409); // driver not at stop yet
+  await driver('POST', '/api/location', { ...stopPlace, accuracy: 8, source: 'simulated' });
+  const arrived = await driver('POST', `/api/trips/${trip.id}/stops/${stopId}/arrive`, {}); assert.equal(arrived.trip.stops[0].status, 'arrived');
   const share = await rider('POST', `/api/trips/${trip.id}/share`, {});
-  const shared = await stranger('GET', `/api/shared/${share.path.split('/').pop()}`); assert.equal(shared.phone, undefined); assert.equal(shared.pin, undefined);
+  const shared = await stranger('GET', `/api/shared/${share.path.split('/').pop()}`); assert.equal(shared.phone, undefined); assert.equal(shared.pin, undefined); assert.equal(shared.stops.length, 1); assert.equal(shared.stops[0].addedBy, undefined);
   await rider('DELETE', `/api/trips/${trip.id}/share`, {}); await stranger('GET', `/api/shared/${share.path.split('/').pop()}`, undefined, 404);
   const alert = await rider('POST', `/api/trips/${trip.id}/sos`, {}, 201); assert.equal(alert.dispatched, false);
   await rider('POST', `/api/alerts/${alert.id}/resolve`, { note: 'Not allowed' }, 403);

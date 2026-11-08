@@ -1,8 +1,7 @@
 export const UGANDA_BOUNDS = { south: -1.55, north: 4.6, west: 29.4, east: 35.1 };
 export const GPS_MAX_AGE_MS = 15_000;
 export const GPS_MAX_ACCURACY = 50;
-export const NIGHT_MATCH_METERS = 25;
-export const DAY_MATCH_METERS = 35;
+// Pickup distance is informational only; there is no day/night distance cap.
 export const OFFICE = 'Plot 14 Martyrs Drive, Ntinda Ministers Village, Kampala, Uganda';
 export const SERVICES = {
   boda: { name: 'Trampo Boda', base: 2000, perKm: 900, perMinute: 60, capacity: 1, minimum: 3500 },
@@ -35,8 +34,7 @@ export function quote(pickup, dropoff, service = 'boda') {
   const fare = Math.max(rate.minimum, Math.ceil((rate.base + km * rate.perKm + minutes * rate.perMinute) / 500) * 500);
   return { distanceKm: km, minutes, fare, currency: 'UGX', estimate: true };
 }
-export function gpsMatch(riderFix, driverFix, now = Date.now(), night = false) {
-  const threshold = night ? NIGHT_MATCH_METERS : DAY_MATCH_METERS;
+export function gpsMatch(riderFix, driverFix, now = Date.now(), _night = false) {
   const reasons = [];
   for (const [role, fix] of [['passenger', riderFix], ['driver', driverFix]]) {
     if (!fix || !inUganda(fix)) reasons.push(`${role}_missing`);
@@ -46,8 +44,7 @@ export function gpsMatch(riderFix, driverFix, now = Date.now(), night = false) {
     }
   }
   const distance = distanceMeters(riderFix, driverFix);
-  if (Number.isFinite(distance) && distance > threshold) reasons.push('too_far');
-  return { matched: reasons.length === 0 && Number.isFinite(distance), distance: Number.isFinite(distance) ? Math.round(distance) : null, threshold, reasons, maxAccuracy: GPS_MAX_ACCURACY, maxAgeSeconds: GPS_MAX_AGE_MS / 1000 };
+  return { matched: reasons.length === 0 && Number.isFinite(distance), distance: Number.isFinite(distance) ? Math.round(distance) : null, threshold: null, reasons, maxAccuracy: GPS_MAX_ACCURACY, maxAgeSeconds: GPS_MAX_AGE_MS / 1000 };
 }
 export function interpolate(a, b, fraction) {
   return { lat: a.lat + (b.lat - a.lat) * fraction, lng: a.lng + (b.lng - a.lng) * fraction };

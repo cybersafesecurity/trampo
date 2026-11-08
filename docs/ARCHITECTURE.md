@@ -11,7 +11,7 @@ A start request is accepted only when all of these hold:
 1. The caller is the assigned driver and the trip is `assigned`.
 2. The four-digit trip PIN matches a salted scrypt hash; attempts are limited.
 3. Both participant fixes are inside Uganda, at most 15 seconds old, not future-dated, and have reported accuracy at most 50 m.
-4. Haversine separation is at most 35 m during the day or 25 m during Night Shield.
+4. Haversine separation is recorded for the trip audit log but is not capped.
 5. The passenger confirmed the vehicle within the previous 120 seconds; night trips also require a well-lit pickup acknowledgement.
 6. The driver's shift checklist is less than 12 hours old.
 

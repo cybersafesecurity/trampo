@@ -348,7 +348,7 @@ export function createBackend(options = {}) {
     const input = z.object({ identityChecked: z.literal(true), safePickup: z.boolean().optional() }).parse(req.body);
     if (req.trip.night_mode) assert(input.safePickup === true, 400, 'Confirm that you are meeting at a well-lit pickup point.');
     const match = gpsMatch(fix(db, req.trip.rider_id), fix(db, req.trip.driver_id), Date.now(), !!req.trip.night_mode);
-    assert(match.matched, 409, 'Your GPS locations do not match yet. Move closer and refresh both locations.', 'GPS_NOT_MATCHED', match);
+    assert(match.matched, 409, 'Your GPS locations are not ready yet. Refresh both locations and try again.', 'GPS_NOT_MATCHED', match);
     db.prepare('UPDATE trips SET rider_confirmed_at=? WHERE id=?').run(Date.now(), req.trip.id);
     event(db, req.trip.id, req.user.id, 'passenger_confirmed', { distance: match.distance }); refresh(); res.json({ ok: true, match });
   }));
@@ -361,7 +361,7 @@ export function createBackend(options = {}) {
     if (!pinOK) { db.prepare('UPDATE trips SET pin_attempts=pin_attempts+1 WHERE id=?').run(req.trip.id); event(db, req.trip.id, req.user.id, 'pin_rejected'); }
     assert(pinOK, 400, 'That boarding PIN is not correct. Ask the passenger for their Trampo PIN.', 'PIN_INVALID');
     const match = gpsMatch(fix(db, req.trip.rider_id), fix(db, req.trip.driver_id), Date.now(), !!req.trip.night_mode);
-    assert(match.matched, 409, 'Trip cannot start: both phones need fresh, accurate GPS within the pickup threshold.', 'GPS_NOT_MATCHED', match);
+    assert(match.matched, 409, 'Trip cannot start: both phones need fresh, accurate GPS.', 'GPS_NOT_MATCHED', match);
     assert(req.trip.rider_confirmed_at && Date.now() - req.trip.rider_confirmed_at <= 120000, 409, 'Ask the passenger to confirm the vehicle and boarding in their app.', 'PASSENGER_NOT_CONFIRMED');
     const d = driver(db, req.user.id);
     assert(d.shift_check_at && Date.now() - d.shift_check_at < 12 * 3600000, 403, 'Complete your shift safety checklist first.');

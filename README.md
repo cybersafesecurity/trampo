@@ -70,10 +70,10 @@ A static GitHub Pages build is included: `npm run build:pages`, then `npm run pr
 - Boda, Comfort, and VIP ride selection; saved Uganda destinations and custom coordinates.
 - Immediate requests and scheduled requests (15 minutes to 30 days ahead), trip history, cancellation before start, receipts, and ratings.
 - Server-authoritative trip state and transactional driver acceptance; one active trip per participant.
-- **Start gate:** both location fixes must be ≤15 seconds old, accuracy ≤50 m, and separation ≤35 m by day / ≤25 m at night. The passenger must confirm boarding within two minutes, and the driver must supply the trip PIN. Five incorrect PIN attempts lock the start attempt.
+- **Start gate:** both location fixes must be ≤15 seconds old and accuracy ≤50 m; pickup distance is shown but not capped. The passenger must confirm boarding within two minutes, and the driver must supply the trip PIN. Five incorrect PIN attempts lock the start attempt.
 - **Private calling:** real WebRTC audio, microphone permission, mute, answer/decline/hang-up, and WebSocket signaling. Only the matched passenger and driver can initiate or join; calls end when the trip ends. Phone numbers are not exchanged by the calling UI. Audio is not recorded.
 - Driver registration with vehicle, permit, and insurance references; pending review; operations approval/rejection; shift checklist; online/offline state; device GPS watch.
-- **Night Shield:** 19:00–06:00 East Africa Time, tighter GPS threshold, well-lit pickup confirmation, five-minute safety check-ins, and operations escalation two minutes after a missed check-in.
+- **Night Shield:** 19:00–06:00 East Africa Time, well-lit pickup confirmation, five-minute safety check-ins, and operations escalation two minutes after a missed check-in.
 - Trusted contacts, expiring/revocable read-only trip links, SOS alert recording, operations resolution notes, and trip audit events.
 - VIP service presentation and booking flow, including scheduled airport/business journeys.
 - Persistent SQLite accounts, hashed passwords, hashed session tokens, HttpOnly/SameSite cookies, origin/header checks, input validation, rate limits, and role/participant authorization.

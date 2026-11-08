@@ -32,7 +32,7 @@ Express/SQLite server (`npm run dev`) remains a separate, clearly-labelled demo.
 ## What is enforced server-side
 
 - **GPS-verified start.** A trip cannot start unless both phones report a browser GPS
-  fix ≤15 s old, accuracy ≤50 m, and separation ≤35 m by day / ≤25 m at night, **and**
+  fix ≤15 s old and accuracy ≤50 m (pickup distance is informational, not capped), **and**
   the passenger confirmed boarding within 2 minutes, **and** the driver enters the
   4-digit PIN, **and** the driver's shift checklist is <12 h old. (5 wrong PINs lock it.)
 - **Matched-only calling.** Free WebRTC audio is offered only to the two participants of

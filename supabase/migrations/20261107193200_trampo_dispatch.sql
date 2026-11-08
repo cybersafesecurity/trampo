@@ -173,7 +173,7 @@ begin
       if b->>'identityChecked' is distinct from 'true' then return trampo.err(400,'Check the driver and vehicle before confirming.'); end if;
       if t.night_mode and b->>'safePickup' is distinct from 'true' then return trampo.err(400,'Confirm that you are meeting at a well-lit pickup point.'); end if;
       m := trampo.gps_match(trampo.fix(t.rider_id),trampo.fix(t.driver_id),t.night_mode);
-      if not (m->>'matched')::boolean then return trampo.err(409,'Your GPS locations do not match yet. Move closer and refresh both locations.','GPS_NOT_MATCHED',m); end if;
+      if not (m->>'matched')::boolean then return trampo.err(409,'Your GPS locations are not ready yet. Refresh both locations and try again.','GPS_NOT_MATCHED',m); end if;
       update trampo.trips set rider_confirmed_at=now_ms where id=tid;
       perform trampo.event(tid,p_uid,'passenger_confirmed',jsonb_build_object('distance',m->>'distance'));
       return jsonb_build_object('status',200,'body',jsonb_build_object('ok',true,'match',m));
@@ -187,7 +187,7 @@ begin
         return trampo.err(400,'That boarding PIN is not correct. Ask the passenger for their Trampo PIN.','PIN_INVALID');
       end if;
       m := trampo.gps_match(trampo.fix(t.rider_id),trampo.fix(t.driver_id),t.night_mode);
-      if not (m->>'matched')::boolean then return trampo.err(409,'Trip cannot start: both phones need fresh, accurate GPS within the pickup threshold.','GPS_NOT_MATCHED',m); end if;
+      if not (m->>'matched')::boolean then return trampo.err(409,'Trip cannot start: both phones need fresh, accurate GPS.','GPS_NOT_MATCHED',m); end if;
       if t.rider_confirmed_at is null or t.rider_confirmed_at<now_ms-120000 then return trampo.err(409,'Ask the passenger to confirm the vehicle and boarding in their app.','PASSENGER_NOT_CONFIRMED'); end if;
       select * into d from trampo.drivers where user_id=p_uid;
       if d.shift_check_at is null or d.shift_check_at<now_ms-43200000 then return trampo.err(403,'Complete your shift safety checklist first.'); end if;

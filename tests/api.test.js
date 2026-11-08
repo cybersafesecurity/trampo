@@ -58,7 +58,7 @@ test('complete trip enforces match, PIN, passenger confirmation, calling window 
   await driver('POST', `/api/trips/${trip.id}/start`, { pin }, 409); // No passenger confirmation.
   await rider('POST', `/api/trips/${trip.id}/confirm`, { identityChecked: true, safePickup: true });
   await driver('POST', `/api/trips/${trip.id}/start`, { pin: pin === '0000' ? '0001' : '0000' }, 400);
-  const started = await driver('POST', `/api/trips/${trip.id}/start`, { pin }); assert.equal(started.trip.status, 'in_progress'); assert.ok(started.match.distance <= 35);
+  const started = await driver('POST', `/api/trips/${trip.id}/start`, { pin }); assert.equal(started.trip.status, 'in_progress'); assert.equal(started.match.threshold, null); assert.ok(!started.match.reasons.includes('too_far')); assert.ok(Number.isFinite(started.match.distance));
   await driver('POST', `/api/trips/${trip.id}/start`, { pin }, 409);
   await driver('POST', `/api/trips/${trip.id}/cancel`, { reason: 'Too late' }, 409);
   const call = await rider('POST', `/api/trips/${trip.id}/call`, {}); assert.equal(call.mode, 'webrtc-p2p');

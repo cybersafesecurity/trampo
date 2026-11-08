@@ -17,7 +17,7 @@ test('demo ride completes the full GPS + passenger + PIN flow', async ({ page })
   await expect(page.getByRole('heading', { name: 'Musa Kato' })).toBeVisible();
   await page.locator('.demo-tools summary').click();
   await page.getByRole('button', { name: 'Simulate driver arrival' }).click();
-  await expect(page.getByText('Pickup locations match', { exact: true })).toBeVisible();
+  await expect(page.getByText('Pickup GPS ready', { exact: true })).toBeVisible();
   const nightCheck = page.getByLabel('I’m at a well-lit pickup point.');
   if (await nightCheck.isVisible()) await nightCheck.check();
   await page.getByRole('button', { name: 'I’m in the right vehicle' }).click();

@@ -54,6 +54,8 @@ export function openStore(path, demo = true) {
     UPDATE users SET city='Kampala' WHERE is_demo=1 AND city='';
     UPDATE users SET job_title='Operations manager', department='Safety & partner operations' WHERE id='demo-admin';
     UPDATE users SET preferred_service='boda' WHERE id='demo-passenger';`);
+  const tripColumns = db.prepare('PRAGMA table_info(trips)').all();
+  if (!tripColumns.some(c => c.name === 'stops')) db.exec("ALTER TABLE trips ADD COLUMN stops TEXT NOT NULL DEFAULT '[]'");
   const count = db.prepare('SELECT COUNT(*) n FROM users').get().n;
   if (!count && demo) transaction(db, () => seed(db));
   return db;

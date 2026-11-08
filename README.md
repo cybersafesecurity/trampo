@@ -19,7 +19,7 @@ cp .env.live.example .env.live   # fill in the public Supabase URL + publishable
 npm run build:live && npm run preview:live   # serves dist-live/ on 0.0.0.0:3000
 ```
 
-Google Maps and reverse-geocoded current-location pickup are enabled by the optional
+Leaflet/OpenStreetMap live trip maps are built in. Reverse-geocoded current-location pickup is enabled by the optional
 `VITE_GOOGLE_MAPS_API_KEY` browser key (see **[docs/GOOGLE_MAPS.md](docs/GOOGLE_MAPS.md)**).
 Without it, the app labels the fallback honestly and keeps the real device GPS.
 
@@ -64,7 +64,7 @@ A static GitHub Pages build is included: `npm run build:pages`, then `npm run pr
 3. A seed demo passenger is matched to a simulated driver. Expand **Demo controls** and choose **Simulate driver arrival**.
 4. Confirm **I’m in the right vehicle** in the passenger app. At night, also confirm a well-lit pickup point.
 5. Choose **Open driver controls**. The simulated driver's demo PIN is explicitly shown; enter it and choose **Verify & start trip**.
-6. The server independently checks passenger confirmation, the PIN, and the driver's shift checklist before changing the trip state. Testing mode currently disables GPS distance/freshness/accuracy boarding gates.
+6. The server independently checks a fresh GPS match within 50 m, passenger confirmation, the PIN, and the driver's shift checklist before changing the trip state.
 7. Try the free call, share a read-only trip link, or record a demo SOS alert.
 8. In driver controls, simulate arrival at the destination and complete the trip. Return to the passenger account to view the receipt and rate the journey.
 
@@ -76,7 +76,9 @@ A static GitHub Pages build is included: `npm run build:pages`, then `npm run pr
 - Boda, Comfort, and VIP ride selection; saved Uganda destinations and custom coordinates.
 - Immediate requests and scheduled requests (15 minutes to 30 days ahead), trip history, cancellation before start, receipts, and ratings.
 - Server-authoritative trip state and transactional driver acceptance; one active trip per participant.
-- **Start gate (testing mode):** GPS distance, freshness and accuracy no longer block boarding. The passenger must confirm boarding within two minutes, and the driver must supply the trip PIN. Five incorrect PIN attempts lock the start attempt. The driver's shift checklist and Night Shield acknowledgement still apply.
+- **Start gate:** both phones need fresh (≤15 s), accurate (≤50 m) GPS inside Uganda and must be within a fixed 50 m of each other. The passenger must confirm boarding within two minutes, and the driver must supply the trip PIN. Five incorrect PIN attempts lock the start attempt. The driver's shift checklist and Night Shield acknowledgement still apply.
+- **Live route:** Leaflet/OpenStreetMap map with driver progress, up to five pending stops, passenger destination changes, driver stop arrival, and fare estimates recomputed through the stop sequence.
+- **Live sharing:** expiring/revocable read-only links include the route, stops and latest driver location, never phone numbers or the boarding PIN.
 - **Private calling:** real WebRTC audio, microphone permission, mute, answer/decline/hang-up, and WebSocket signaling. Only the matched passenger and driver can initiate or join; calls end when the trip ends. Phone numbers are not exchanged by the calling UI. Audio is not recorded.
 - Driver registration with vehicle, permit, and insurance references; pending review; operations approval/rejection; shift checklist; online/offline state; device GPS watch.
 - **Night Shield:** 19:00–06:00 East Africa Time, well-lit pickup confirmation, five-minute safety check-ins, and operations escalation two minutes after a missed check-in.

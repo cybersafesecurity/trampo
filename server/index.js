@@ -7,13 +7,14 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { z } from 'zod';
 import { openStore, hashPassword, checkPassword, user, userProfile, driver, fix, saveFix, event, activeTrip, trip, setting, setSetting, transaction, accountType } from './store.js';
 import { createGoogleAuth } from './google.js';
-import { inUganda, distanceMeters, isNight, quote, gpsMatch, dispatchCandidates, interpolate, normalizePhone, publicUser, SERVICES, OFFICE } from './domain.js';
+import { inUganda, distanceMeters, isNight, quote, gpsMatch, routeQuote, dispatchCandidates, interpolate, BOARDING_MAX_DISTANCE, normalizePhone, publicUser, SERVICES, OFFICE } from './domain.js';
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const hash = value => createHash('sha256').update(value).digest('hex');
 const id = () => randomUUID();
 const json = value => JSON.parse(value);
 const positionSchema = z.object({ lat: z.number().finite(), lng: z.number().finite(), name: z.string().trim().max(140).optional() });
+const placeSchema = positionSchema.extend({ name: z.string().trim().min(1).max(140), area: z.string().trim().max(240).optional() });
 const fixSchema = positionSchema.extend({ accuracy: z.number().finite().min(0).max(100000), source: z.enum(['browser', 'simulated']).default('browser') });
 class ApiError extends Error { constructor(status, message, code = 'REQUEST_FAILED', details) { super(message); this.status = status; this.code = code; this.details = details; } }
 const assert = (condition, status, message, code, details) => { if (!condition) throw new ApiError(status, message, code, details); };
@@ -97,7 +98,7 @@ export function createBackend(options = {}) {
     const match = t.driver_id ? gpsMatch(fix(db, t.rider_id), fix(db, t.driver_id), Date.now(), !!t.night_mode) : null;
     const lastCheck = t.last_checkin_at || t.started_at || t.assigned_at;
     return {
-      id: t.id, status: t.status, service: t.service, pickup: json(t.pickup), dropoff: json(t.dropoff),
+      id: t.id, status: t.status, service: t.service, pickup: json(t.pickup), dropoff: json(t.dropoff), stops: json(t.stops || '[]'),
       fare: t.fare, finalFare: t.final_fare, distanceKm: t.distance_km, minutes: t.minutes, payment: t.payment, note: t.note,
       createdAt: t.created_at, scheduledAt: t.scheduled_at, assignedAt: t.assigned_at, startedAt: t.started_at, endedAt: t.ended_at,
       night: !!t.night_mode, simulated: !!t.simulated, rating: t.rating, cancelReason: t.cancel_reason,
@@ -347,8 +348,9 @@ export function createBackend(options = {}) {
     const input = z.object({ identityChecked: z.literal(true), safePickup: z.boolean().optional() }).parse(req.body);
     if (req.trip.night_mode) assert(input.safePickup === true, 400, 'Confirm that you are meeting at a well-lit pickup point.');
     const match = gpsMatch(fix(db, req.trip.rider_id), fix(db, req.trip.driver_id), Date.now(), !!req.trip.night_mode);
+    assert(match.matched, 409, `Move within ${BOARDING_MAX_DISTANCE} m of your driver and keep both GPS locations fresh before confirming.`, 'GPS_NOT_MATCHED', match);
     db.prepare('UPDATE trips SET rider_confirmed_at=? WHERE id=?').run(Date.now(), req.trip.id);
-    event(db, req.trip.id, req.user.id, 'passenger_confirmed', { distance: match.distance, gpsGate: 'disabled_for_testing' }); refresh(); res.json({ ok: true, match });
+    event(db, req.trip.id, req.user.id, 'passenger_confirmed', { distance: match.distance, threshold: match.threshold }); refresh(); res.json({ ok: true, match });
   }));
   app.post('/api/trips/:id/start', tripAuth, route((req, res) => {
     assert(req.user.id === req.trip.driver_id && req.trip.status === 'assigned', 409, 'Only the assigned driver can start this trip.');
@@ -359,6 +361,7 @@ export function createBackend(options = {}) {
     if (!pinOK) { db.prepare('UPDATE trips SET pin_attempts=pin_attempts+1 WHERE id=?').run(req.trip.id); event(db, req.trip.id, req.user.id, 'pin_rejected'); }
     assert(pinOK, 400, 'That boarding PIN is not correct. Ask the passenger for their Trampo PIN.', 'PIN_INVALID');
     const match = gpsMatch(fix(db, req.trip.rider_id), fix(db, req.trip.driver_id), Date.now(), !!req.trip.night_mode);
+    assert(match.matched, 409, `Trip cannot start: both phones need fresh, accurate GPS and must be within ${BOARDING_MAX_DISTANCE} m.`, 'GPS_NOT_MATCHED', match);
     assert(req.trip.rider_confirmed_at && Date.now() - req.trip.rider_confirmed_at <= 120000, 409, 'Ask the passenger to confirm the vehicle and boarding in their app.', 'PASSENGER_NOT_CONFIRMED');
     const d = driver(db, req.user.id);
     assert(d.shift_check_at && Date.now() - d.shift_check_at < 12 * 3600000, 403, 'Complete your shift safety checklist first.');
@@ -366,12 +369,68 @@ export function createBackend(options = {}) {
       const current = trip(db, req.trip.id);
       assert(current.status === 'assigned', 409, 'Trip already started.');
       db.prepare("UPDATE trips SET status='in_progress',started_at=?,start_distance=?,last_checkin_at=? WHERE id=?").run(Date.now(), match.distance, Date.now(), req.trip.id);
-      event(db, req.trip.id, req.user.id, 'trip_started', { distance: match.distance, threshold: match.threshold, pinVerified: true, passengerConfirmed: true, gpsGate: 'disabled_for_testing' });
+      event(db, req.trip.id, req.user.id, 'trip_started', { distance: match.distance, threshold: match.threshold, pinVerified: true, passengerConfirmed: true, gpsGate: 'required_50m' });
     });
     refresh(); res.json({ trip: serializeTrip(trip(db, req.trip.id), req.user.id), match });
   }));
+  function updateRoute(t, actor, mutate, eventType, detail) {
+    return transaction(db, () => {
+      const current = trip(db, t.id);
+      assert(['assigned', 'in_progress'].includes(current.status), 409, 'Stops can only be changed during a matched trip.');
+      const stops = json(current.stops || '[]');
+      const next = mutate(current, stops);
+      const estimate = routeQuote(json(current.pickup), next.stops, next.dropoff, current.service);
+      db.prepare('UPDATE trips SET stops=?,dropoff=?,fare=?,distance_km=?,minutes=? WHERE id=?').run(JSON.stringify(next.stops), JSON.stringify(next.dropoff), estimate.fare, estimate.distanceKm, estimate.minutes, current.id);
+      event(db, current.id, actor, eventType, { ...detail, fare: estimate.fare, distanceKm: estimate.distanceKm, minutes: estimate.minutes });
+      return trip(db, current.id);
+    });
+  }
+  app.post('/api/trips/:id/stops', tripAuth, route((req, res) => {
+    rateBucket(`route:${req.user.id}`, 20);
+    assert(req.user.id === req.trip.rider_id, 403, 'Only the passenger can add a stop.');
+    const input = placeSchema.parse(req.body);
+    assert(inUganda(input), 400, 'Choose a stop inside Uganda.');
+    const updated = updateRoute(req.trip, req.user.id, (current, stops) => {
+      assert(stops.filter(s => s.status === 'pending').length < 5, 409, 'You can have up to five pending stops.');
+      const stop = { id: id(), name: input.name, area: input.area || '', lat: input.lat, lng: input.lng, status: 'pending', addedBy: req.user.id, addedAt: Date.now(), arrivedAt: null };
+      return { stops: [...stops, stop], dropoff: json(current.dropoff) };
+    }, 'stop_added', { name: input.name, lat: input.lat, lng: input.lng });
+    refresh(); res.status(201).json({ trip: serializeTrip(updated, req.user.id) });
+  }));
+  app.delete('/api/trips/:id/stops/:stopId', tripAuth, route((req, res) => {
+    assert(req.user.id === req.trip.rider_id, 403, 'Only the passenger can remove a stop.');
+    const updated = updateRoute(req.trip, req.user.id, (current, stops) => {
+      const stop = stops.find(s => s.id === req.params.stopId);
+      assert(stop && stop.status === 'pending', 409, 'Only a pending stop can be removed.');
+      return { stops: stops.filter(s => s.id !== stop.id), dropoff: json(current.dropoff) };
+    }, 'stop_removed', { stopId: req.params.stopId });
+    refresh(); res.json({ trip: serializeTrip(updated, req.user.id) });
+  }));
+  app.post('/api/trips/:id/stops/:stopId/arrive', tripAuth, route((req, res) => {
+    assert(req.user.id === req.trip.driver_id && req.trip.status === 'in_progress', 409, 'Only the driver can mark a stop reached on an started trip.');
+    const f = fix(db, req.user.id), now = Date.now();
+    assert(f && inUganda(f) && now - f.updatedAt <= 15000 && f.updatedAt <= now + 5000 && f.accuracy >= 0 && f.accuracy <= 50, 409, 'Refresh your GPS before marking the stop reached.');
+    const updated = updateRoute(req.trip, req.user.id, (current, stops) => {
+      const next = stops.find(s => s.status === 'pending');
+      assert(next && next.id === req.params.stopId, 409, 'Reach the next pending stop first.');
+      const distance = distanceMeters(f, next);
+      assert(distance <= BOARDING_MAX_DISTANCE, 409, `Move within ${BOARDING_MAX_DISTANCE} m of the stop before marking it reached.`, 'STOP_NOT_REACHED', { distance: Math.round(distance), threshold: BOARDING_MAX_DISTANCE });
+      return { stops: stops.map(s => s.id === next.id ? { ...s, status: 'arrived', arrivedAt: now } : s), dropoff: json(current.dropoff) };
+    }, 'stop_arrived', { stopId: req.params.stopId });
+    refresh(); res.json({ trip: serializeTrip(updated, req.user.id) });
+  }));
+  app.post('/api/trips/:id/destination', tripAuth, route((req, res) => {
+    rateBucket(`route:${req.user.id}`, 20);
+    assert(req.user.id === req.trip.rider_id, 403, 'Only the passenger can change the final destination.');
+    const input = placeSchema.parse(req.body);
+    assert(inUganda(input), 400, 'Choose a destination inside Uganda.');
+    const old = json(req.trip.dropoff);
+    const updated = updateRoute(req.trip, req.user.id, (current, stops) => ({ stops, dropoff: { lat: input.lat, lng: input.lng, name: input.name, area: input.area || '' } }), 'destination_changed', { from: old, to: input });
+    refresh(); res.json({ trip: serializeTrip(updated, req.user.id) });
+  }));
   app.post('/api/trips/:id/complete', tripAuth, route((req, res) => {
     assert(req.user.id === req.trip.driver_id && req.trip.status === 'in_progress', 409, 'Only the driver can complete a started trip.');
+    assert(!json(req.trip.stops || '[]').some(s => s.status === 'pending'), 409, 'Visit or remove the remaining stops before completing the trip.');
     db.prepare("UPDATE trips SET status='completed',ended_at=?,final_fare=fare WHERE id=?").run(Date.now(), req.trip.id);
     db.prepare("UPDATE shares SET revoked_at=? WHERE trip_id=? AND revoked_at IS NULL").run(Date.now(), req.trip.id);
     event(db, req.trip.id, req.user.id, 'trip_completed', { fare: req.trip.fare, billing: 'preview_estimate' }); endCalls(req.trip); refresh();
@@ -431,7 +490,7 @@ export function createBackend(options = {}) {
     assert(callActive(req.trip), 409, 'Match with a driver before sharing your trip.');
     const token = randomBytes(24).toString('base64url'), expires = Date.now() + 12 * 3600000;
     db.prepare('INSERT INTO shares(token_hash,trip_id,expires_at) VALUES(?,?,?)').run(hash(token), req.trip.id, expires);
-    event(db, req.trip.id, req.user.id, 'share_link_created'); res.json({ path: `/share/${token}`, expiresAt: expires });
+    event(db, req.trip.id, req.user.id, 'share_link_created'); res.json({ path: `#/share/${token}`, expiresAt: expires });
   }));
   app.delete('/api/trips/:id/share', tripAuth, route((req, res) => {
     db.prepare('UPDATE shares SET revoked_at=? WHERE trip_id=? AND revoked_at IS NULL').run(Date.now(), req.trip.id);
@@ -444,7 +503,7 @@ export function createBackend(options = {}) {
     assert(share, 404, 'This trip link has expired or been revoked.');
     const t = trip(db, share.trip_id); assert(callActive(t), 404, 'This journey has ended.');
     const d = driver(db, t.driver_id), loc = fix(db, t.driver_id);
-    res.json({ pickup: json(t.pickup), dropoff: json(t.dropoff), status: t.status, driverName: user(db, t.driver_id).name.split(' ')[0], vehicle: `${d.color} ${d.model}`, plate: d.plate, location: loc, expiresAt: share.expires_at });
+    res.json({ pickup: json(t.pickup), dropoff: json(t.dropoff), stops: json(t.stops || '[]').map(({ addedBy, ...s }) => s), status: t.status, simulated: !!t.simulated, driverName: user(db, t.driver_id).name.split(' ')[0], vehicle: `${d.color} ${d.model}`, plate: d.plate, location: loc, serverTime: Date.now(), expiresAt: share.expires_at });
   }));
   app.post('/api/trips/:id/sos', tripAuth, route((req, res) => {
     assert(participant(req.trip, req.user.id), 403, 'Only participants can raise a trip alert.');
@@ -474,7 +533,7 @@ export function createBackend(options = {}) {
     assert(participant(req.trip, req.user.id), 403, 'Not your simulated trip.');
     const { phase } = z.object({ phase: z.enum(['pickup', 'destination']) }).parse(req.body);
     assert(phase === 'pickup' ? req.trip.status === 'assigned' : req.trip.status === 'in_progress', 409, 'This simulated movement is not available at this stage.');
-    const riderFix = fix(db, req.trip.rider_id), target = phase === 'pickup' ? riderFix : json(req.trip.dropoff);
+    const riderFix = fix(db, req.trip.rider_id), nextStop = json(req.trip.stops || '[]').find(s => s.status === 'pending'), target = phase === 'pickup' ? riderFix : nextStop || json(req.trip.dropoff);
     assert(target && inUganda(target), 400, 'Passenger location is required first.');
     const point = phase === 'pickup' ? { lat: target.lat + 0.00006, lng: target.lng + 0.00006 } : target;
     saveFix(db, req.trip.driver_id, { ...point, accuracy: 8 }, 'simulated');
@@ -485,6 +544,7 @@ export function createBackend(options = {}) {
     assert(demo && req.trip.simulated && req.trip.status === 'assigned', 403, 'Only an explicitly simulated trip can use this demo shortcut.');
     assert(participant(req.trip, req.user.id), 403, 'Not your demo trip.');
     const match = gpsMatch(fix(db, req.trip.rider_id), fix(db, req.trip.driver_id), Date.now(), !!req.trip.night_mode);
+    assert(match.matched, 409, 'Both demo GPS locations must match before confirming.', 'GPS_NOT_MATCHED', match);
     db.prepare('UPDATE trips SET rider_confirmed_at=? WHERE id=?').run(Date.now(), req.trip.id);
     event(db, req.trip.id, req.trip.rider_id, 'demo_passenger_confirmed', { distance: match.distance }); refresh(); res.json({ ok: true });
   }));

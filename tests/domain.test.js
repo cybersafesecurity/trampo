@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { distanceMeters, gpsMatch, inUganda, isNight, quote, normalizePhone } from '../server/domain.js';
+import { BOARDING_MAX_DISTANCE, distanceMeters, gpsMatch, inUganda, isNight, quote, routeQuote, normalizePhone } from '../server/domain.js';
 const pickup = { lat: 0.3354, lng: 32.5769 }, now = 1000000;
 const fix = (offset = 0, extra = {}) => ({ ...pickup, lat: pickup.lat + offset, accuracy: 8, updatedAt: now, source: 'browser', ...extra });
 test('Haversine distance is symmetric and zero at the same point', () => {
@@ -8,17 +8,22 @@ test('Haversine distance is symmetric and zero at the same point', () => {
   assert.ok(Math.abs(distanceMeters(pickup, fix(.0001)) - 11.12) < .1);
   assert.equal(distanceMeters(pickup, fix(.0001)), distanceMeters(fix(.0001), pickup));
 });
-test('testing mode lets boarding verify without GPS freshness, accuracy or proximity gates', () => {
-  for (const m of [gpsMatch(fix(), fix(.1), now), gpsMatch(null, fix(), now), gpsMatch(fix(), null, now), gpsMatch(null, null, now), gpsMatch(fix(), fix(0, { updatedAt: now - 15001 }), now), gpsMatch(fix(), fix(0, { updatedAt: now + 6000 }), now), gpsMatch(fix(), fix(0, { accuracy: 51 }), now), gpsMatch(fix(), fix(0, { accuracy: -1 }), now), gpsMatch(fix(), fix(.1), now, true)]) {
-    assert.equal(m.matched, true);
-    assert.equal(m.testingBypass, true);
-    assert.deepEqual(m.reasons, []);
-    assert.equal(m.threshold, null);
-    assert.equal(m.maxAccuracy, null);
-    assert.equal(m.maxAgeSeconds, null);
+test('boarding requires fresh accurate GPS within a fixed 50 m', () => {
+  assert.equal(BOARDING_MAX_DISTANCE, 50);
+  const ok = gpsMatch(fix(), fix(.0002), now);
+  assert.equal(ok.matched, true); assert.equal(ok.threshold, 50); assert.equal(ok.maxAccuracy, 50); assert.equal(ok.maxAgeSeconds, 15); assert.deepEqual(ok.reasons, []);
+  for (const [m, reason] of [[gpsMatch(fix(), fix(.1), now), 'too_far'], [gpsMatch(null, fix(), now), 'passenger_missing'], [gpsMatch(fix(), null, now), 'driver_missing'], [gpsMatch(fix(), fix(0, { updatedAt: now - 15001 }), now), 'driver_stale'], [gpsMatch(fix(), fix(0, { updatedAt: now + 6000 }), now), 'driver_stale'], [gpsMatch(fix(), fix(0, { accuracy: 51 }), now), 'driver_inaccurate'], [gpsMatch(fix(), fix(0, { accuracy: -1 }), now), 'driver_inaccurate'], [gpsMatch(fix(), fix(0, { lat: 51.5, lng: -.1 }), now), 'driver_missing']]) {
+    assert.equal(m.matched, false); assert.ok(m.reasons.includes(reason), `${reason} in ${m.reasons}`);
   }
-  assert.equal(gpsMatch(fix(), fix(.1), now).distance > 10000, true);
+  assert.equal(gpsMatch(fix(), fix(.1), now, true).threshold, 50);
   assert.equal(gpsMatch(null, null, now).distance, null);
+});
+test('route quotes include stops and reject tiny or foreign legs', () => {
+  const drop = { lat: .3476, lng: 32.5825 }, stop = { lat: .33, lng: 32.5822 };
+  const direct = routeQuote(pickup, [], drop, 'boda'), via = routeQuote(pickup, [stop], drop, 'boda');
+  assert.ok(via.fare >= direct.fare); assert.ok(via.minutes >= direct.minutes + 3); assert.equal(via.estimate, true);
+  assert.throws(() => routeQuote(pickup, [{ lat: 51.5, lng: -.1 }], drop, 'boda'));
+  assert.throws(() => routeQuote(pickup, [pickup], drop, 'boda'));
 });
 test('Night Shield uses Uganda time, not the server timezone', () => {
   assert.equal(isNight(new Date('2026-01-01T16:00:00Z')), true); // 19:00 EAT

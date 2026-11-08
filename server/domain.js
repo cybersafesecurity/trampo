@@ -1,9 +1,10 @@
 export const UGANDA_BOUNDS = { south: -1.55, north: 4.6, west: 29.4, east: 35.1 };
 export const GPS_MAX_AGE_MS = 15_000;
 export const GPS_MAX_ACCURACY = 50;
+export const BOARDING_MAX_DISTANCE = 50;
 export const DISPATCH_MAX_AGE_MS = 30_000;
 export const SHIFT_MAX_AGE_MS = 12 * 3_600_000;
-// Pickup distance is informational only. Dispatch has no maximum radius either.
+// Boarding requires the two phones within 50 m. Dispatch has no maximum radius.
 export const OFFICE = 'Plot 14 Martyrs Drive, Ntinda Ministers Village, Kampala, Uganda';
 export const SERVICES = {
   boda: { name: 'Trampo Boda', base: 2000, perKm: 900, perMinute: 60, capacity: 1, minimum: 3500 },
@@ -36,12 +37,34 @@ export function quote(pickup, dropoff, service = 'boda') {
   const fare = Math.max(rate.minimum, Math.ceil((rate.base + km * rate.perKm + minutes * rate.perMinute) / 500) * 500);
   return { distanceKm: km, minutes, fare, currency: 'UGX', estimate: true };
 }
-// Testing mode: boarding no longer waits for GPS freshness, accuracy or proximity.
-// The PIN, passenger confirmation, shift checklist and Night Shield acknowledgement
-// still run server-side. Dispatch eligibility keeps its own availability GPS checks.
-export function gpsMatch(riderFix, driverFix, _now = Date.now(), _night = false) {
+export function gpsMatch(riderFix, driverFix, now = Date.now(), _night = false) {
+  const reasons = [];
+  for (const [role, fix] of [['passenger', riderFix], ['driver', driverFix]]) {
+    if (!fix || !inUganda(fix)) reasons.push(`${role}_missing`);
+    else {
+      if (!Number.isFinite(fix.updatedAt) || now - fix.updatedAt > GPS_MAX_AGE_MS || fix.updatedAt > now + 5000) reasons.push(`${role}_stale`);
+      if (!Number.isFinite(fix.accuracy) || fix.accuracy < 0 || fix.accuracy > GPS_MAX_ACCURACY) reasons.push(`${role}_inaccurate`);
+    }
+  }
   const distance = distanceMeters(riderFix, driverFix);
-  return { matched: true, distance: Number.isFinite(distance) ? Math.round(distance) : null, threshold: null, reasons: [], maxAccuracy: null, maxAgeSeconds: null, testingBypass: true };
+  if (Number.isFinite(distance) && distance > BOARDING_MAX_DISTANCE) reasons.push('too_far');
+  return { matched: reasons.length === 0 && Number.isFinite(distance), distance: Number.isFinite(distance) ? Math.round(distance) : null, threshold: BOARDING_MAX_DISTANCE, reasons, maxAccuracy: GPS_MAX_ACCURACY, maxAgeSeconds: GPS_MAX_AGE_MS / 1000 };
+}
+export function routeQuote(pickup, stops, dropoff, service = 'boda') {
+  const points = [pickup, ...stops, dropoff];
+  if (points.some(p => !inUganda(p))) throw new Error('Every stop must be inside Uganda.');
+  let straight = 0;
+  for (let i = 1; i < points.length; i++) {
+    const leg = distanceMeters(points[i - 1], points[i]) / 1000;
+    if (leg < 0.05) throw new Error('Each new stop or destination must be at least 50 m from the previous point.');
+    straight += leg;
+  }
+  const rate = SERVICES[service];
+  if (!rate) throw new Error('Choose a valid ride type.');
+  const km = Math.round(straight * 1.25 * 10) / 10;
+  const minutes = Math.ceil(km / 22 * 60 + 5 + stops.length * 3);
+  const fare = Math.max(rate.minimum, Math.ceil((rate.base + km * rate.perKm + minutes * rate.perMinute) / 500) * 500);
+  return { distanceKm: km, minutes, fare, currency: 'UGX', estimate: true };
 }
 /**
  * Dispatch ranking. Availability is an eligibility gate; among available

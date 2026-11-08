@@ -1,11 +1,15 @@
-# Google Maps and current-location pickup
+# Optional Google address lookup + Leaflet live map
 
-Trampo reads the device's GPS through the browser Geolocation API. With a Google Maps
-browser key configured, it reverse-geocodes that exact fix into an address and shows the
-pickup, destination, nearby drivers and matched driver on Google Maps. The geocoder only
-labels the point — it never replaces the device coordinates used for dispatch or boarding.
+Trampo reads the device's GPS through the browser Geolocation API and renders the live
+trip map with **Leaflet + OpenStreetMap tiles** (no API key required). The map shows the
+pickup, ordered stops, final destination and latest driver location. If tiles cannot
+load, it falls back to a clearly labelled illustrated overview.
 
-## Enable it
+With an optional Google Maps browser key configured, Trampo also reverse-geocodes the
+exact device fix into an address. The geocoder only labels the point — it never replaces
+the device coordinates used for dispatch or boarding.
+
+## Enable optional address lookup
 
 1. In Google Cloud, enable **Maps JavaScript API** and **Geocoding API** on a billing-enabled
    project.
@@ -19,25 +23,21 @@ labels the point — it never replaces the device coordinates used for dispatch 
    ```
 
 4. For GitHub Pages, add a repository **Actions variable** named
-   `VITE_GOOGLE_MAPS_API_KEY` (Settings → Secrets and variables → Actions → Variables), then
-   re-run the Pages workflow. `VITE_*` values are embedded in the public bundle; the referrer
-   and API restrictions are what protect a browser key. Never put secret/server keys here.
-5. Rebuild/redeploy. The map footer says **© Google · Map data ©<year> Google** when Google
-   Maps loads, and **Google Maps unavailable · illustrated fallback** if loading/authentication
-   fails. Without a key the original SVG map remains available and current-location pickup
-   keeps the exact GPS coordinates, with a clear notice that address lookup needs Maps.
+   `VITE_GOOGLE_MAPS_API_KEY`, then re-run the Pages workflow. `VITE_*` values are embedded
+   in the public bundle; referrer and API restrictions protect a browser key. Never put
+   secret/server keys here.
+5. Rebuild/redeploy. Without a key the Leaflet map still works and current-location pickup
+   keeps the exact GPS coordinates, with a clear notice that address lookup is unavailable.
 
 ## Failure behaviour
 
 - Permission denied/unavailable: no pickup is invented; the rider can choose manually.
 - Geocoder outage/zero results: the exact GPS coordinates remain the pickup; the UI says
   the address could not be resolved.
-- Maps script/authentication failure: the illustrated map is labelled as a fallback.
-- Location outside the Uganda service area is still rejected by the existing server gate.
+- OpenStreetMap tile outage: the illustrated map is labelled as a fallback.
+- Location outside the Uganda service area is still rejected by the server gate.
 
-Browser tests mock Google's script and geocoder to verify address resolution, marker
-placement, outage fallback and rejected-key fallback without requiring a billable key.
-
-Run the non-billable browser regression suite with `npm run test:e2e:maps` (use
-`TRAMPO_SANDBOX_BROWSER=true` in this sandbox). It builds with a test-only key and
-intercepts Google network traffic; no real Maps request is made.
+Browser tests mock Google's geocoder and OpenStreetMap tiles to verify address resolution,
+Leaflet rendering, geocoder outage fallback and tile-outage fallback without requiring a
+billable key or live tile traffic. Run `npm run test:e2e:maps` (use
+`TRAMPO_SANDBOX_BROWSER=true` in this sandbox).

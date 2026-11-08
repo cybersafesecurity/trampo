@@ -1,6 +1,6 @@
 # Trampo — Your city. Your ride.
 
-An Uganda-first, responsive ride-hailing application with a dark, futuristic Ubuntu-font interface, a working Node/SQLite backend, React interface, GPS-verified trip starts, matched-only browser audio calling with incoming-call notifications, role-specific profiles for admins/car drivers/motorbike riders/passengers, Google sign-in, driver onboarding, operations review, VIP selection, and Night Shield safety tools.
+An Uganda-first, installable PWA and responsive ride-hailing application with a dark, futuristic Ubuntu-font interface, a working Node/SQLite backend, React interface, GPS-verified trip starts, matched-only browser audio calling with incoming-call notifications, role-specific profiles for admins/car drivers/motorbike riders/passengers, Google sign-in, driver onboarding, operations review, VIP selection, and Night Shield safety tools.
 
 **Head office:** Plot 14 Martyrs Drive, Ntinda Ministers Village, Kampala, Uganda.
 
@@ -26,6 +26,10 @@ Without it, the app labels the fallback honestly and keeps the real device GPS.
 See **[docs/SUPABASE_LIVE.md](docs/SUPABASE_LIVE.md)** for setup, the server-enforced
 GPS/PIN start gate, matched-only calling, driver approval, the first admin account, and
 the remaining production limitations (SMTP, OTP, KYC, payments, TURN, emergency response).
+
+## Installable PWA
+
+Trampo can be installed from **https://trampo.lat/** to an Android/iOS home screen or desktop app launcher. The PWA includes standalone display, maskable/app icons, an in-app install flow, an honest offline screen, and user-controlled updates. Only public build files are cached; sign-in, live trip state, driver locations, boarding PINs, maps, and calling remain online-only. See **[docs/PWA.md](docs/PWA.md)**.
 
 ## Design
 
@@ -76,6 +80,7 @@ The production frontend is published by GitHub Actions at **https://trampo.lat/*
 
 ## What works
 
+- Installable PWA with home-screen launch, offline-aware public shell, and no cached account/trip data.
 - Responsive passenger, driver, and operations workspaces; mobile navigation.
 - Boda, Comfort, and VIP ride selection; saved Uganda destinations and custom coordinates.
 - Immediate requests and scheduled requests (15 minutes to 30 days ahead), trip history, cancellation before start, receipts, and ratings.

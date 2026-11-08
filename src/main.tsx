@@ -6,8 +6,11 @@ import '@fontsource/ubuntu/latin-500.css';
 import '@fontsource/ubuntu/latin-700.css';
 import './styles.css';
 import App from './App';
+import { initPwa } from './pwa';
 
 document.documentElement.dataset.theme = 'dark';
 document.documentElement.style.colorScheme = 'dark';
+
+initPwa();
 
 ReactDOM.createRoot(document.getElementById('root')!).render(<React.StrictMode><App /></React.StrictMode>);

@@ -680,7 +680,12 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   const backend = createBackend();
   const { app, server, demo } = backend;
   if (process.env.NODE_ENV === 'production') {
-    app.use(express.static(resolve(root, 'dist')));
+    app.use(express.static(resolve(root, 'dist'), {
+      setHeaders(res, file) {
+        if (/\\.(webmanifest)$/.test(file)) res.setHeader('Content-Type', 'application/manifest+json');
+        if (/(sw\\.js|call-sw\\.js|manifest\\.webmanifest|offline\\.html|pwa-version\\.json)$/.test(file)) res.setHeader('Cache-Control', 'no-cache');
+      },
+    }));
     app.get('/{*path}', (req, res) => res.sendFile(resolve(root, 'dist/index.html')));
   } else {
     const { createServer: createViteServer } = await import('vite');

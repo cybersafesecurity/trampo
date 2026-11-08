@@ -21,7 +21,7 @@ environment only allows `main` to deploy, so changes reach Pages when merged to
    workflow's `pages: write` permission. **This API step is required:** GitHub Pages
    ignores an uploaded `CNAME` file when the publishing source is GitHub Actions.
 4. Runs `node scripts/check-pages.mjs` to verify the domain file, root assets,
-   notification worker, and live workflow.
+   installable PWA manifest/icons, offline shell, call worker, and live workflow.
 5. Uploads `dist/` and deploys with `actions/deploy-pages`.
 
 The build injects only **browser-safe public values** (set in the workflow `env`):
@@ -87,6 +87,13 @@ that origin:
 The frontend derives auth redirects from the current origin, so the same bundle
 works at the custom-domain root and in local previews. The live test server also
 redirects old `/trampo/` links to `/` without dropping callback query parameters.
+
+## PWA
+
+The deployed bundle is an installable PWA: manifest, maskable/app icons, a public
+app-shell service worker, an honest offline fallback, and user-controlled updates.
+Only public build files are cached; Supabase auth/trip/Realtime traffic is never
+cached. See [PWA.md](PWA.md) for install steps and cache policy.
 
 ## Notes
 

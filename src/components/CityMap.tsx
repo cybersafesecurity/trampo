@@ -1,6 +1,8 @@
 import { useMemo, useRef, useState } from 'react';
 import { Crosshair, Minus, Plus, ShieldCheck, MapPin, Navigation, Layers } from 'lucide-react';
 import type { Fix, Position, Trip } from '../types';
+import { googleMapsConfigured } from '../googleMaps';
+import GoogleMap from './GoogleMap';
 
 type Props = { pickup: Position; dropoff?: Position | null; drivers?: { id: string; location: Position }[]; trip?: Trip | null; compact?: boolean; onPick?: (p: Position) => void };
 const central = (p: Position) => p.lat > 0.28 && p.lat < 0.385 && p.lng > 32.53 && p.lng < 32.65;
@@ -23,7 +25,12 @@ const streets = [
   'M -30 294 C 146 304 244 291 367 271 S 576 287 734 259 L 1040 214',
   'M 40 790 C 212 714 326 685 485 676 S 735 628 1050 563',
 ];
-export default function CityMap({ pickup, dropoff, drivers = [], trip, compact = false, onPick }: Props) {
+export default function CityMap(props: Props) {
+  const [googleFailed, setGoogleFailed] = useState(false);
+  if (googleMapsConfigured && !googleFailed) return <GoogleMap {...props} onFail={() => setGoogleFailed(true)} />;
+  return <IllustratedMap {...props} googleFailed={googleFailed} />;
+}
+function IllustratedMap({ pickup, dropoff, drivers = [], trip, compact = false, onPick, googleFailed = false }: Props & { googleFailed?: boolean }) {
   const [zoom, setZoom] = useState(1), [pan, setPan] = useState({ x: 0, y: 0 }), [layer, setLayer] = useState(false);
   const svg = useRef<SVGSVGElement>(null), drag = useRef<{ x: number; y: number; px: number; py: number } | null>(null);
   const all = [pickup, ...(dropoff ? [dropoff] : [])];
@@ -78,6 +85,6 @@ export default function CityMap({ pickup, dropoff, drivers = [], trip, compact =
     {onPick && <div className="map-pick-hint">Tap the map to set your destination</div>}
     <div className="map-controls"><button aria-label="Zoom in" onClick={() => setZoom(z => Math.min(2.6, z + .25))} disabled={zoom >= 2.6}><Plus size={19} /></button><button aria-label="Zoom out" onClick={() => setZoom(z => Math.max(.75, z - .25))} disabled={zoom <= .75}><Minus size={19} /></button><button aria-label="Recenter map" onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }}><Crosshair size={19} /></button></div>
     {!compact && <div className="map-protection"><span><ShieldCheck size={20} /></span><div><strong>Your pickup, protected.</strong><p>Two phones. One verified location.</p></div></div>}
-    <div className="map-attribution">Illustrated map · not for navigation</div>
+    <div className="map-attribution">{googleFailed ? 'Google Maps unavailable · illustrated fallback' : 'Illustrated map · not for navigation'}</div>
   </div>;
 }

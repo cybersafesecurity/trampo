@@ -39,7 +39,7 @@ Express/SQLite server (`npm run dev`) remains a separate, clearly-labelled demo.
   an `assigned`/`in_progress` trip, and ends when the trip ends. Realtime channel
   membership (`trip:<id>`) is gated by RLS on `realtime.messages`.
 - **Approved drivers only.** Drivers register, stay `pending`, and must be approved in
-  Operations (with a recorded document check) before going online and accepting trips.
+  Operations (with a recorded document check) before going online and being matched.
 - **Roles.** `passenger`, `driver` (car / motorbike), `admin`. Ordinary public signup
   creates a passenger. The single reserved owner email below may activate admin through
   normal signup **only after Supabase records email confirmation**. Client-supplied

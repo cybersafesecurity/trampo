@@ -34,6 +34,8 @@ jobs:
           VITE_TRAMPO_BACKEND: supabase
           VITE_SUPABASE_URL: https://euknlccrsfvuaymuecpd.supabase.co
           VITE_SUPABASE_PUBLISHABLE_KEY: sb_publishable_Cp6uo1XC01OdaHeT5d8baw_9nnFkqhV
+          # Public, referrer-restricted browser key; never use a server/API secret here.
+          VITE_GOOGLE_MAPS_API_KEY: ${{ vars.VITE_GOOGLE_MAPS_API_KEY }}
       - name: Configure Pages
         uses: actions/configure-pages@v5
       - name: Upload artifact

@@ -1,7 +1,9 @@
 export const UGANDA_BOUNDS = { south: -1.55, north: 4.6, west: 29.4, east: 35.1 };
 export const GPS_MAX_AGE_MS = 15_000;
 export const GPS_MAX_ACCURACY = 50;
-// Pickup distance is informational only; there is no day/night distance cap.
+export const DISPATCH_MAX_AGE_MS = 30_000;
+export const SHIFT_MAX_AGE_MS = 12 * 3_600_000;
+// Pickup distance is informational only. Dispatch has no maximum radius either.
 export const OFFICE = 'Plot 14 Martyrs Drive, Ntinda Ministers Village, Kampala, Uganda';
 export const SERVICES = {
   boda: { name: 'Trampo Boda', base: 2000, perKm: 900, perMinute: 60, capacity: 1, minimum: 3500 },
@@ -45,6 +47,23 @@ export function gpsMatch(riderFix, driverFix, now = Date.now(), _night = false) 
   }
   const distance = distanceMeters(riderFix, driverFix);
   return { matched: reasons.length === 0 && Number.isFinite(distance), distance: Number.isFinite(distance) ? Math.round(distance) : null, threshold: null, reasons, maxAccuracy: GPS_MAX_ACCURACY, maxAgeSeconds: GPS_MAX_AGE_MS / 1000 };
+}
+/**
+ * Dispatch ranking. Availability is an eligibility gate; among available
+ * drivers the closest wins. There is deliberately no maximum radius.
+ * Caller supplies `busy` from the transactional active-trip check.
+ */
+export function dispatchCandidates(drivers, pickup, now = Date.now()) {
+  return drivers.map(d => {
+    const f = d.location;
+    const available = d.status === 'approved' && !!d.online && d.account_status !== 'suspended' && !d.busy
+      && Number.isFinite(d.shift_check_at) && now - d.shift_check_at < SHIFT_MAX_AGE_MS && d.shift_check_at <= now + 5000
+      && f && inUganda(f) && Number.isFinite(f.updatedAt) && now - f.updatedAt <= DISPATCH_MAX_AGE_MS && f.updatedAt <= now + 5000
+      && Number.isFinite(f.accuracy) && f.accuracy >= 0 && f.accuracy <= GPS_MAX_ACCURACY;
+    if (!available || d.vehicle_type !== pickup.service) return null;
+    const distance = distanceMeters(f, pickup);
+    return Number.isFinite(distance) ? { ...d, dispatchDistance: distance } : null;
+  }).filter(Boolean).sort((a, b) => a.dispatchDistance - b.dispatchDistance || (b.rating ?? 0) - (a.rating ?? 0) || String(a.user_id).localeCompare(String(b.user_id)));
 }
 export function interpolate(a, b, fraction) {
   return { lat: a.lat + (b.lat - a.lat) * fraction, lng: a.lng + (b.lng - a.lng) * fraction };

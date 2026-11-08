@@ -10,12 +10,18 @@ An Uganda-first, responsive ride-hailing application with a working Node/SQLite 
 
 A real, account-backed deployment is included alongside the demo: **Supabase Auth
 (email + password), Postgres, an Edge Function, Realtime call signalling, and pg_cron.**
-It has no demo accounts, no simulated GPS, and no auto-dispatch. Build and serve it with:
+It has no demo accounts or simulated GPS. Requests are matched automatically to approved,
+online, idle drivers of the selected vehicle type, with a fresh shift check and GPS;
+the nearest eligible driver ranks first, with no maximum distance. Build and serve it with:
 
 ```bash
 cp .env.live.example .env.live   # fill in the public Supabase URL + publishable key
 npm run build:live && npm run preview:live   # serves dist-live/ on 0.0.0.0:3000
 ```
+
+Google Maps and reverse-geocoded current-location pickup are enabled by the optional
+`VITE_GOOGLE_MAPS_API_KEY` browser key (see **[docs/GOOGLE_MAPS.md](docs/GOOGLE_MAPS.md)**).
+Without it, the app labels the fallback honestly and keeps the real device GPS.
 
 See **[docs/SUPABASE_LIVE.md](docs/SUPABASE_LIVE.md)** for setup, the server-enforced
 GPS/PIN start gate, matched-only calling, driver approval, the first admin account, and

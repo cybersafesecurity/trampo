@@ -59,7 +59,7 @@ To enable Google, copy `.env.example` to `.env`, set `GOOGLE_CLIENT_ID`, `GOOGLE
 
 ## GitHub Pages
 
-A static GitHub Pages build is included: `npm run build:pages`, then `npm run preview:pages`. The workflow in `.github/workflows/pages.yml` deploys that build when Pages is set to **GitHub Actions** in repository settings. The Pages version is a browser-only demo with localStorage state; it cannot run the Node/SQLite backend, server-enforced GPS gate, WebSocket signaling, or real calls. See [docs/GITHUB_PAGES.md](docs/GITHUB_PAGES.md).
+The production frontend is published by GitHub Actions at **https://trampo.lat/** and talks directly to the live Supabase backend. The workflow registers the custom domain, deploys the root-path live bundle, and includes `public/CNAME`. DNS, domain verification, and HTTPS are owner-controlled steps documented in [docs/GITHUB_PAGES.md](docs/GITHUB_PAGES.md). A separate browser-only demo build remains available through `npm run build:pages`.
 
 ## Take the demo for a ride
 

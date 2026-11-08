@@ -14,7 +14,7 @@ the device coordinates used for dispatch or boarding.
 1. In Google Cloud, enable **Maps JavaScript API** and **Geocoding API** on a billing-enabled
    project.
 2. Create a **browser API key**. Restrict it by HTTP referrer to
-   `https://cybersafesecurity.github.io/trampo/*` (and your own preview origin if needed),
+   `https://trampo.lat/*` and `https://www.trampo.lat/*` (and your own preview origin if needed),
    and restrict it to those two APIs. Do not use a service-account key or OAuth client secret.
 3. For local live builds, put the key in `.env.live` (ignored by git):
 

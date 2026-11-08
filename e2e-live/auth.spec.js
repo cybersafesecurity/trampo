@@ -41,7 +41,7 @@ async function setup(page, { recoverError, googleEnabled = false } = {}) {
     if (url.pathname.endsWith('/functions/v1/trampo-api/config')) return json({ ok: true, demo: false, googleSignIn: false });
     return json({ error: `Unexpected test request: ${url.pathname}` }, 500);
   });
-  await page.goto('/trampo/');
+  await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Welcome to Trampo.' })).toBeVisible();
   return { calls, errors };
 }
@@ -59,10 +59,10 @@ test('first admin signup keeps the chosen password and activates Operations only
   await expect(dialog).toContainText('Your admin account and password are saved.');
   expect(calls.signup.email).toBe(ADMIN);
   expect(calls.signup.password).toBe(PASSWORD);
-  expect(calls.signup.query.redirect_to).toContain('/trampo/');
+  expect(calls.signup.query.redirect_to).toContain('http://127.0.0.1:3003/');
   expect(calls.signup.data).toEqual({ name: 'Trampo Admin' });
   await expect(page.getByRole('button', { name: 'Operations', exact: true })).toHaveCount(0);
-  await page.goto('/trampo/?code=test-signup-callback');
+  await page.goto('/?code=test-signup-callback');
   await expect(page.getByRole('button', { name: 'Operations', exact: true })).toBeVisible();
   expect(calls.exchange.grantType).toBe('pkce');
   expect(calls.exchange.code_verifier).toBeTruthy();
@@ -78,9 +78,9 @@ test('forgot password sends a PKCE reset link, opens the new-password form, vali
   await expect(dialog).toContainText('a reset link has been sent');
   await expect(page.getByRole('button', { name: /Resend reset email/ })).toBeDisabled();
   expect(calls.recover.email).toBe(ADMIN);
-  expect(calls.recover.query.redirect_to).toContain('/trampo/');
+  expect(calls.recover.query.redirect_to).toContain('http://127.0.0.1:3003/');
   expect(calls.recover.code_challenge).toBeTruthy();
-  await page.goto('/trampo/?code=test-recovery-callback');
+  await page.goto('/?code=test-recovery-callback');
   await expect(page.getByRole('heading', { name: 'Choose a new password.' })).toBeVisible();
   await page.getByLabel(/^New password/).fill(PASSWORD);
   await page.getByLabel('Confirm new password').fill('not-the-same-password');
@@ -102,7 +102,7 @@ test('mail errors explain the quota and expired links without a false success no
   await page.getByRole('button', { name: 'Forgot password?' }).click();
   await expect(page.getByRole('dialog')).toContainText('two emails per hour');
   await expect(page.getByRole('button', { name: 'Forgot password?' })).toBeEnabled();
-  await page.goto('/trampo/?error=access_denied&error_code=otp_expired&error_description=Email%20link%20is%20invalid%20or%20has%20expired');
+  await page.goto('/?error=access_denied&error_code=otp_expired&error_description=Email%20link%20is%20invalid%20or%20has%20expired');
   await expect(page.getByRole('dialog')).toContainText('This email link has expired');
   await expect(page.getByRole('dialog')).toContainText('newest email');
   await expect(page).not.toHaveURL(/error_code/);
@@ -130,7 +130,7 @@ test('live Google button follows Supabase Auth settings and starts a PKCE OAuth 
   await page.waitForURL(/\/auth\/v1\/authorize/);
   const url = new URL(page.url());
   expect(url.searchParams.get('provider')).toBe('google');
-  expect(url.searchParams.get('redirect_to')).toContain('/trampo/');
+  expect(url.searchParams.get('redirect_to')).toContain('http://127.0.0.1:3003/');
   expect(url.searchParams.get('code_challenge')).toBeTruthy();
   expect(errors).toEqual([]);
 });
@@ -152,4 +152,10 @@ test('dark Ubuntu theme and the prominent Trampo logo are present before sign-in
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.getByRole('dialog')).toBeVisible();
   expect(errors).toEqual([]);
+});
+
+test('legacy project-page URLs redirect to the custom-domain root without dropping callback query parameters', async ({ request }) => {
+  const response = await request.get('/trampo/?code=legacy-callback', { maxRedirects: 0 });
+  expect(response.status()).toBe(301);
+  expect(response.headers().location).toBe('/?code=legacy-callback');
 });

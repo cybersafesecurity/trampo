@@ -13,5 +13,5 @@ export default defineConfig({
   testDir: './e2e-live', timeout: 120000, expect: { timeout: 30000 }, fullyParallel: false, workers: 1,
   reporter: [['list']], outputDir: 'test-results/live-auth',
   use: { baseURL: 'http://127.0.0.1:3003', viewport: { width: 1440, height: 1000 }, launchOptions: { executablePath, args }, screenshot: 'only-on-failure', trace: sandbox ? 'off' : 'retain-on-failure' },
-  webServer: { command: 'node e2e-live/server.js', url: 'http://127.0.0.1:3003/trampo/', reuseExistingServer: false, timeout: 30000, env: { PORT: '3003' } },
+  webServer: { command: 'node e2e-live/server.js', url: 'http://127.0.0.1:3003/', reuseExistingServer: false, timeout: 30000, env: { PORT: '3003' } },
 });

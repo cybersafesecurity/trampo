@@ -1,1 +1,19 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="18" fill="#176b4c"/><path d="M16 17h34v10H37v23H27V27H16z" fill="#fff"/><path d="M40 32h9v9h-9z" fill="#c8ed9b"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Trampo">
+  <defs>
+    <linearGradient id="trampo-aubergine" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#3b0729"/>
+      <stop offset="0.55" stop-color="#2c001e"/>
+      <stop offset="1" stop-color="#120817"/>
+    </linearGradient>
+    <linearGradient id="trampo-orange" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ff8a65"/>
+      <stop offset="0.5" stop-color="#e95420"/>
+      <stop offset="1" stop-color="#c7431a"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="18" fill="url(#trampo-aubergine)"/>
+  <rect x="1.25" y="1.25" width="61.5" height="61.5" rx="16.75" fill="none" stroke="#e95420" stroke-opacity="0.55" stroke-width="2.5"/>
+  <path d="M14 16h36v11H37.5v23h-11V27H14z" fill="url(#trampo-orange)"/>
+  <circle cx="47" cy="45" r="6" fill="#e95420"/>
+  <circle cx="47" cy="45" r="2.4" fill="#fff7f2"/>
+</svg>

@@ -4,6 +4,7 @@ import { api } from './lib';
 import { isStaticDemo } from './staticDemo';
 import { isSupabaseLive, supabase, supabaseConfigError } from './supabase';
 import type { Bootstrap, CallState } from './types';
+import { readCallAlerts, writeCallAlerts, notificationPermission, requestCallNotificationPermission, startIncomingCallAlert, stopIncomingCallAlert, previewCallAlert, unlockCallAudio, type CallAlertPreferences, type CallAlertPermission } from './callAlerts';
 
 export function useTrampo() {
   const [data, setData] = useState<Bootstrap | null>(null);
@@ -17,6 +18,9 @@ export function useTrampo() {
   const stream = useRef<MediaStream | null>(null);
   const audio = useRef<HTMLAudioElement | null>(null);
   const callRef = useRef(call); callRef.current = call;
+  const dataRef = useRef(data); dataRef.current = data;
+  const [callAlerts, setCallAlertsState] = useState<CallAlertPreferences>(readCallAlerts);
+  const [callPermission, setCallPermission] = useState<CallAlertPermission>(notificationPermission);
   const pendingIce = useRef<RTCIceCandidateInit[]>([]);
   const incomingOffer = useRef<RTCSessionDescriptionInit | null>(null);
   const callTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -52,6 +56,7 @@ export function useTrampo() {
   }, [reload]);
   useEffect(() => { if (!toast) return; const timer = setTimeout(() => setToast(null), 5500); return () => clearTimeout(timer); }, [toast]);
   const cleanupCall = useCallback(() => {
+    stopIncomingCallAlert();
     if (callTimeout.current) clearTimeout(callTimeout.current);
     pc.current?.close(); pc.current = null;
     stream.current?.getTracks().forEach(t => t.stop()); stream.current = null;
@@ -110,7 +115,10 @@ export function useTrampo() {
   async function handleSignal(msg: any) {
     if (msg.type === 'refresh') { reload(); return; }
     if (msg.type === 'call-offer' && callRef.current.status === 'idle') {
-      pendingIce.current = []; incomingOffer.current = msg.offer; setCall({ status: 'incoming', tripId: msg.tripId, callId: msg.callId });
+      pendingIce.current = []; incomingOffer.current = msg.offer;
+      const current = dataRef.current;
+      const callerName = msg.caller?.name || (current?.user.role === 'driver' ? current?.activeTrip?.rider.name : current?.activeTrip?.driver?.name) || 'Your trip participant';
+      setCall({ status: 'incoming', tripId: msg.tripId, callId: msg.callId, callerName });
     }
     if (msg.type === 'call-answer' && pc.current && msg.callId === callRef.current.callId) {
       try { await pc.current.setRemoteDescription(msg.answer); for (const c of pendingIce.current) await pc.current.addIceCandidate(c); pendingIce.current = []; setCall(c => ({ ...c, status: 'connecting' })); }
@@ -135,6 +143,37 @@ export function useTrampo() {
     });
     return () => { live = false; if (channel.current) supabase!.removeChannel(channel.current); channel.current = null; cleanupCall(); };
   }, [data?.activeTrip?.id, data?.activeTrip?.status]);
+  useEffect(() => {
+    if (call.status === 'incoming' && call.callId) {
+      startIncomingCallAlert(call.callId, call.callerName || 'Your trip participant', callAlerts);
+      notify(`${call.callerName || 'Your trip participant'} is calling you on Trampo.`, 'info');
+      return () => stopIncomingCallAlert();
+    }
+    stopIncomingCallAlert();
+  }, [call.status, call.callId, call.callerName, callAlerts, notify]);
+  useEffect(() => {
+    const refresh = () => setCallPermission(notificationPermission());
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', refresh);
+    return () => { window.removeEventListener('focus', refresh); document.removeEventListener('visibilitychange', refresh); stopIncomingCallAlert(); };
+  }, []);
+  const updateCallAlerts = useCallback((next: CallAlertPreferences) => {
+    const normalized = { enabled: !!next.enabled, sound: !!next.sound, vibration: !!next.vibration };
+    writeCallAlerts(normalized); setCallAlertsState(normalized);
+    if (!normalized.enabled) stopIncomingCallAlert();
+  }, []);
+  const enableCallAlerts = useCallback(async () => {
+    const permission = await requestCallNotificationPermission();
+    setCallPermission(permission);
+    if (permission === 'granted') {
+      updateCallAlerts({ ...readCallAlerts(), enabled: true });
+      notify('Incoming call notifications are enabled.');
+    } else if (permission === 'denied') notify('Notifications are blocked in this browser. You will still see the in-app call screen.', 'error');
+    else if (permission === 'unsupported') notify('This browser cannot show system notifications. Keep Trampo open for the in-app call screen.', 'info');
+    return permission;
+  }, [notify, updateCallAlerts]);
+  const previewCallAlerts = useCallback(async () => { await previewCallAlert(callAlerts); }, [callAlerts]);
+  const unlockCallRingtone = useCallback(() => unlockCallAudio(), []);
   async function prepareCall(tripId: string, callId: string, iceServers: RTCIceServer[]) {
     if (!navigator.mediaDevices?.getUserMedia || !window.RTCPeerConnection) throw new Error('Calling needs a secure HTTPS connection and a WebRTC-compatible browser.');
     const media = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true }, video: false }); stream.current = media;
@@ -153,6 +192,7 @@ export function useTrampo() {
   async function startCall(tripId: string) {
     if (callRef.current.status !== 'idle') return;
     setCall({ status: 'calling', tripId });
+    void unlockCallAudio();
     try {
       const result = await api<{ callId: string; initiator: string; iceServers: RTCIceServer[] }>(`/trips/${tripId}/call`, {});
       setCall({ status: 'calling', tripId, callId: result.callId }); callRef.current = { status: 'calling', tripId, callId: result.callId };
@@ -165,6 +205,8 @@ export function useTrampo() {
     const current = callRef.current, offer = incomingOffer.current;
     if (!current.tripId || !current.callId || !offer) return;
     setCall(c => ({ ...c, status: 'connecting' }));
+    stopIncomingCallAlert();
+    void unlockCallAudio();
     try {
       const { iceServers } = await api<{ iceServers: RTCIceServer[] }>(`/trips/${current.tripId}/call/config`);
       const peer = await prepareCall(current.tripId, current.callId, iceServers);
@@ -181,6 +223,6 @@ export function useTrampo() {
     if (isSupabaseLive) throw new Error('Demo role switching is disabled on the live backend.');
     endCall(); await api('/demo/session', { role, userId }); await reload();
   }
-  return { data, error, connected, toast, setToast, notify, reload, call, startCall, answerCall, endCall, toggleMute, switchRole };
+  return { data, error, connected, toast, setToast, notify, reload, call, startCall, answerCall, endCall, toggleMute, switchRole, callAlerts, callPermission, updateCallAlerts, enableCallAlerts, previewCallAlerts, unlockCallRingtone };
 }
 export type Trampo = ReturnType<typeof useTrampo>;

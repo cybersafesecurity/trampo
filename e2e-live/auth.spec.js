@@ -134,3 +134,22 @@ test('live Google button follows Supabase Auth settings and starts a PKCE OAuth 
   expect(url.searchParams.get('code_challenge')).toBeTruthy();
   expect(errors).toEqual([]);
 });
+
+test('dark Ubuntu theme and the prominent Trampo logo are present before sign-in', async ({ page }) => {
+  const { errors } = await setup(page);
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute('content', '#2c001e');
+  const theme = await page.evaluate(() => ({
+    font: getComputedStyle(document.body).fontFamily,
+    background: getComputedStyle(document.body).backgroundColor,
+    logo: document.querySelector('.boot-screen .brand img')?.getBoundingClientRect().width || 0,
+    wordmark: document.querySelector('.boot-screen .brand > span')?.getBoundingClientRect().height || 0,
+  }));
+  expect(theme.font).toContain('Ubuntu');
+  expect(theme.background).not.toBe('rgb(255, 255, 255)');
+  expect(theme.logo).toBeGreaterThanOrEqual(60);
+  expect(theme.wordmark).toBeGreaterThanOrEqual(40);
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  await expect(page.getByRole('dialog')).toBeVisible();
+  expect(errors).toEqual([]);
+});

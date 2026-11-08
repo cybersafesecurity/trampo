@@ -52,16 +52,16 @@ export default function LeafletMap({ pickup, dropoff, drivers = [], trip, compac
     group.clearLayers(); driverMarker.current = null;
     tiles.current?.setOpacity(simple ? 0.55 : 1);
     const points = [pickup, ...stops, ...(dropoff ? [dropoff] : [])];
-    L.marker(latLng(pickup), { icon: icon('P', '#217452'), title: pickup.name || 'Pickup', alt: 'Pickup' }).addTo(group).bindPopup(pickup.name || 'Pickup');
-    stops.forEach((s, i) => L.marker(latLng(s), { icon: icon(String(i + 1), s.status === 'arrived' ? '#8a9780' : '#b28b46', s.status === 'arrived' ? 'arrived' : ''), title: s.name, alt: `Stop ${i + 1}: ${s.name}` }).addTo(group).bindPopup(`${s.status === 'arrived' ? 'Reached' : 'Stop'} ${i + 1}: ${s.name}`));
-    if (dropoff) L.marker(latLng(dropoff), { icon: icon('D', '#243c30'), title: dropoff.name || 'Destination', alt: 'Destination' }).addTo(group).bindPopup(dropoff.name || 'Destination');
-    if (points.length > 1) L.polyline(points.map(latLng), { color: '#217452', weight: 4, opacity: 0.8, dashArray: '8 10' }).addTo(group);
+    L.marker(latLng(pickup), { icon: icon('P', '#e95420'), title: pickup.name || 'Pickup', alt: 'Pickup' }).addTo(group).bindPopup(pickup.name || 'Pickup');
+    stops.forEach((s, i) => L.marker(latLng(s), { icon: icon(String(i + 1), s.status === 'arrived' ? '#6f5b73' : '#aea79f', s.status === 'arrived' ? 'arrived' : ''), title: s.name, alt: `Stop ${i + 1}: ${s.name}` }).addTo(group).bindPopup(`${s.status === 'arrived' ? 'Reached' : 'Stop'} ${i + 1}: ${s.name}`));
+    if (dropoff) L.marker(latLng(dropoff), { icon: icon('D', '#772953'), title: dropoff.name || 'Destination', alt: 'Destination' }).addTo(group).bindPopup(dropoff.name || 'Destination');
+    if (points.length > 1) L.polyline(points.map(latLng), { color: '#ff8a65', weight: 4, opacity: 0.8, dashArray: '8 10' }).addTo(group);
     if (driver) {
       const target = trip?.status === 'assigned' ? pickup : nextStop || dropoff;
-      if (target) L.polyline([latLng(driver), latLng(target)], { color: '#217452', weight: 5, opacity: 0.9 }).addTo(group);
-      driverMarker.current = L.marker(latLng(driver), { icon: icon('●', '#217452', 'driver'), title: 'Driver live location', alt: 'Driver live location', zIndexOffset: 1000 }).addTo(group).bindPopup('Driver live location');
+      if (target) L.polyline([latLng(driver), latLng(target)], { color: '#e95420', weight: 5, opacity: 0.9 }).addTo(group);
+      driverMarker.current = L.marker(latLng(driver), { icon: icon('●', '#e95420', 'driver'), title: 'Driver live location', alt: 'Driver live location', zIndexOffset: 1000 }).addTo(group).bindPopup('Driver live location');
     } else if (!active) {
-      drivers.slice(0, 12).forEach(d => L.marker(latLng(d.location), { icon: icon('•', '#b28b46'), title: 'Available driver', alt: 'Available driver' }).addTo(group));
+      drivers.slice(0, 12).forEach(d => L.marker(latLng(d.location), { icon: icon('•', '#aea79f'), title: 'Available driver', alt: 'Available driver' }).addTo(group));
     }
     const fit = L.latLngBounds(points.map(latLng));
     if (driver) fit.extend(latLng(driver));

@@ -129,7 +129,10 @@ still activates admin only through confirmed email/password signup, not Google-o
 ## Calling / VoIP
 
 The live build uses direct browser-to-browser WebRTC (no per-minute charge, no
-recording). Public STUN (`stun:stun.l.google.com:19302`) is configured. For restrictive
+recording). Incoming calls can show browser notifications, ring, vibrate, and flash
+the title after the user explicitly enables call alerts from the bell menu or incoming
+call screen. Alerts are device-local and stop on answer/decline/end; they are not
+closed-app push and require the Trampo page to stay open and connected. Public STUN (`stun:stun.l.google.com:19302`) is configured. For restrictive
 mobile networks add a TURN relay by setting Edge Function secrets `TURN_URLS`,
 `TURN_USERNAME`, `TURN_CREDENTIAL`. For scale, the recommended free self-hosted media
 server is **LiveKit** (Apache-2.0) with **coturn**; see `docs/ARCHITECTURE.md` and

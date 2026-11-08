@@ -1,4 +1,5 @@
 import { asset } from './lib';
+import { registerTrampoWorker } from './pwa';
 
 export type CallAlertPreferences = { enabled: boolean; sound: boolean; vibration: boolean };
 export type CallAlertPermission = NotificationPermission | 'unsupported';
@@ -36,7 +37,6 @@ let titleTimer: ReturnType<typeof setInterval> | null = null;
 let originalTitle = '';
 let activeCallId: string | null = null;
 let desktopNotification: Notification | null = null;
-let registrationPromise: Promise<ServiceWorkerRegistration | null> | null = null;
 
 export function audioReady() {
   return !!audio && audio.state === 'running';
@@ -54,13 +54,7 @@ export async function unlockCallAudio() {
 }
 
 async function callWorker() {
-  if (typeof navigator === 'undefined' || !navigator.serviceWorker || !window.isSecureContext) return null;
-  if (!registrationPromise) {
-    registrationPromise = navigator.serviceWorker.register(`${import.meta.env.BASE_URL}call-sw.js`, { scope: import.meta.env.BASE_URL })
-      .then(() => navigator.serviceWorker!.ready)
-      .catch(() => null);
-  }
-  return registrationPromise;
+  return registerTrampoWorker();
 }
 
 export async function requestCallNotificationPermission(): Promise<CallAlertPermission> {
@@ -109,8 +103,8 @@ async function showNotification(callId: string, callerName: string, prefs: CallA
   const options: NotificationOptions & { renotify?: boolean; vibrate?: number[] } = {
     body: `${callerName} is calling you on Trampo. Open the app to answer or decline.`,
     tag: `trampo-call-${callId}`,
-    icon: asset('favicon.svg'),
-    badge: asset('favicon.svg'),
+    icon: asset('icons/icon-192.png'),
+    badge: asset('icons/badge-96.png'),
     requireInteraction: true,
     silent: !prefs.sound,
     renotify: true,
@@ -137,7 +131,7 @@ export async function closeCallNotification(callId?: string) {
   try { desktopNotification?.close(); } catch { /* Already closed. */ }
   desktopNotification = null;
   try {
-    const registration = await registrationPromise;
+    const registration = await registerTrampoWorker();
     const notifications = await registration?.getNotifications({ tag });
     notifications?.forEach(notification => notification.close());
   } catch { /* No worker notification to close. */ }
@@ -177,7 +171,7 @@ export async function previewCallAlert(prefs: CallAlertPreferences) {
   if (prefs.vibration) vibrateOnce();
   if (notificationPermission() === 'granted') {
     const registration = await callWorker();
-    const options: NotificationOptions = { body: 'Call alerts are ready. Incoming WebRTC calls will appear here.', tag: 'trampo-call-preview', icon: asset('favicon.svg'), silent: !prefs.sound };
+    const options: NotificationOptions = { body: 'Call alerts are ready. Incoming WebRTC calls will appear here.', tag: 'trampo-call-preview', icon: asset('icons/icon-192.png'), badge: asset('icons/badge-96.png'), silent: !prefs.sound };
     try {
       if (registration?.active) await registration.showNotification('Trampo call alerts enabled', options);
       else new Notification('Trampo call alerts enabled', options);

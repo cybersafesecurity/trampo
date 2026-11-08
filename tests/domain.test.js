@@ -8,20 +8,24 @@ test('Haversine distance is symmetric and zero at the same point', () => {
   assert.ok(Math.abs(distanceMeters(pickup, fix(.0001)) - 11.12) < .1);
   assert.equal(distanceMeters(pickup, fix(.0001)), distanceMeters(fix(.0001), pickup));
 });
-test('GPS start requires both fresh accurate fixes inside daytime threshold', () => {
+test('GPS start requires fresh accurate fixes but has no pickup distance cap', () => {
   assert.equal(gpsMatch(fix(), fix(.0002), now).matched, true);
-  assert.equal(gpsMatch(fix(), fix(.0004), now).matched, false);
+  assert.equal(gpsMatch(fix(), fix(.0004), now).matched, true);
+  assert.equal(gpsMatch(fix(), fix(.1), now).matched, true);
+  assert.equal(gpsMatch(fix(), fix(.1), now).threshold, null);
+  assert.equal(gpsMatch(fix(), fix(.1), now).reasons.includes('too_far'), false);
   assert.equal(gpsMatch(null, fix(), now).matched, false);
   assert.equal(gpsMatch(fix(), fix(0, { updatedAt: now - 15001 }), now).matched, false);
   assert.equal(gpsMatch(fix(), fix(0, { updatedAt: now + 6000 }), now).matched, false);
   assert.equal(gpsMatch(fix(), fix(0, { accuracy: 51 }), now).matched, false);
   assert.equal(gpsMatch(fix(), fix(0, { accuracy: -1 }), now).matched, false);
 });
-test('Night threshold is tighter and never relaxes freshness', () => {
-  assert.equal(gpsMatch(fix(), fix(.00025), now, true).matched, false);
-  assert.equal(gpsMatch(fix(), fix(.0002), now, true).matched, true);
-  assert.equal(gpsMatch(fix(), fix(.0002), now, true).threshold, 25);
+test('Night mode adds no distance cap and never relaxes freshness/accuracy', () => {
+  assert.equal(gpsMatch(fix(), fix(.00025), now, true).matched, true);
+  assert.equal(gpsMatch(fix(), fix(.1), now, true).matched, true);
+  assert.equal(gpsMatch(fix(), fix(.1), now, true).threshold, null);
   assert.equal(gpsMatch(fix(), fix(0, { updatedAt: 0 }), now, true).matched, false);
+  assert.equal(gpsMatch(fix(), fix(0, { accuracy: 51 }), now, true).matched, false);
 });
 test('Night Shield uses Uganda time, not the server timezone', () => {
   assert.equal(isNight(new Date('2026-01-01T16:00:00Z')), true); // 19:00 EAT

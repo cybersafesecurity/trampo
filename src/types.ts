@@ -12,7 +12,7 @@ export type UserProfile = User & {
 export type ProfileDirectory = { profiles: UserProfile[]; counts: Record<AccountType, number>; total: number };
 export type Place = Position & { name: string; area: string };
 export type Quote = { distanceKm: number; minutes: number; fare: number; currency: string; estimate: boolean };
-export type Match = { matched: boolean; distance: number | null; threshold: number; reasons: string[]; maxAccuracy: number; maxAgeSeconds: number };
+export type Match = { matched: boolean; distance: number | null; threshold: number | null; reasons: string[]; maxAccuracy: number; maxAgeSeconds: number };
 export type Trip = {
   id: string; status: 'scheduled' | 'searching' | 'assigned' | 'in_progress' | 'completed' | 'cancelled'; service: Service;
   pickup: Position; dropoff: Position; fare: number; finalFare: number | null; distanceKm: number; minutes: number; payment: string; note: string;

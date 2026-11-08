@@ -39,7 +39,7 @@ function IllustratedMap({ pickup, dropoff, drivers = [], trip, compact = false, 
   const d = dropoff ? project(dropoff) : null;
   const blocks = useMemo(() => Array.from({ length: 154 }, (_, i) => {
     const col = i % 14, row = Math.floor(i / 14), x = col * 81 - 40 + (row % 2) * 16, y = row * 77 - 25;
-    return <g key={i} transform={`rotate(-10 ${x + 35} ${y + 28})`}><rect x={x} y={y} width={58 + i % 11} height={47 + i % 9} rx={5} fill={i % 8 === 0 ? '#dce6d2' : i % 3 === 0 ? '#e3e8dd' : '#e6eade'} /><path d={`M${x + 28} ${y + 3}v42M${x + 3} ${y + 24}h53`} stroke="#f3f5ee" strokeWidth="3" /></g>;
+    return <g key={i} transform={`rotate(-10 ${x + 35} ${y + 28})`}><rect x={x} y={y} width={58 + i % 11} height={47 + i % 9} rx={5} fill={i % 8 === 0 ? '#241229' : i % 3 === 0 ? '#1e0f26' : '#221128'} /><path d={`M${x + 28} ${y + 3}v42M${x + 3} ${y + 24}h53`} stroke="#2c001e" strokeWidth="3" /></g>;
   }), []);
   const route = d ? `M${p.x},${p.y} L${p.x + (d.x - p.x) * .3},${p.y - 25} L${d.x - (d.x - p.x) * .25},${d.y + 22} L${d.x},${d.y}` : '';
   return <div className={`city-map ${compact ? 'compact' : ''} ${onPick ? 'pick-mode' : ''}`}>
@@ -47,18 +47,18 @@ function IllustratedMap({ pickup, dropoff, drivers = [], trip, compact = false, 
       onPointerDown={e => { if ((e.target as Element).closest('[data-marker]')) return; drag.current = { x: e.clientX, y: e.clientY, px: pan.x, py: pan.y }; e.currentTarget.setPointerCapture(e.pointerId); }}
       onPointerMove={e => { if (!drag.current || !svg.current) return; const rect = svg.current.getBoundingClientRect(); setPan({ x: drag.current.px - (e.clientX - drag.current.x) / rect.width * 1000 / zoom, y: drag.current.py - (e.clientY - drag.current.y) / rect.height * 760 / zoom }); }}
       onPointerUp={e => { const moved = drag.current && Math.hypot(e.clientX - drag.current.x, e.clientY - drag.current.y); drag.current = null; if (!moved && onPick && svg.current) { const point = svg.current.createSVGPoint(); point.x = e.clientX; point.y = e.clientY; const matrix = svg.current.getScreenCTM(); if (matrix) { const pt = point.matrixTransform(matrix.inverse()); const pos = isLocal ? { lat: 0.383 - pt.y / 760 * .10, lng: 32.535 + pt.x / 1000 * .11 } : { lat: 4.7 - pt.y / 760 * 6.4, lng: 29.3 + pt.x / 1000 * 6.1 }; onPick(pos); } } }}>
-      <defs><pattern id="map-dots" width="18" height="18" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r=".7" fill="#c5d2c0" /></pattern><filter id="marker-shadow" x="-80%" y="-80%" width="260%" height="260%"><feDropShadow dx="0" dy="3" stdDeviation="5" floodColor="#213d2e" floodOpacity=".2" /></filter></defs>
-      <rect x="-2000" y="-2000" width="5000" height="5000" fill={layer ? '#e2e9db' : '#eef0e7'} />
+      <defs><pattern id="map-dots" width="18" height="18" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r=".7" fill="#5e2750" /></pattern><filter id="marker-shadow" x="-80%" y="-80%" width="260%" height="260%"><feDropShadow dx="0" dy="3" stdDeviation="5" floodColor="#000000" floodOpacity=".2" /></filter></defs>
+      <rect x="-2000" y="-2000" width="5000" height="5000" fill={layer ? '#1b0922' : '#170b1e'} />
       {isLocal ? <>
         {blocks}
-        <path d="M45 42L212 28 264 113 221 212 74 224 25 139Z" fill="#cdddba" />
-        <path d="M631 257C686 223 766 241 780 299L757 387 668 414 611 356Z" fill="#d1dfbf" />
-        <path d="M652 278C720 254 748 286 729 330S670 356 674 389" fill="none" stroke="#e9efdf" strokeWidth="9" />
-        <path d="M382 363L469 345 508 406 451 438 391 419Z" fill="#c9dcb5" />
-        <path d="M823 15L982 3 1008 132 904 153 835 100Z" fill="#d4e1c4" />
-        <path d="M34 568L160 523 211 577 176 650 72 666Z" fill="#d2dfc2" />
-        {streets.map((path, i) => <g key={i}><path d={path} fill="none" stroke={layer ? '#cad4c4' : '#d9ddd2'} strokeWidth={i < 6 ? 19 : 13} /><path d={path} fill="none" stroke={layer ? '#edf1e8' : '#fffefa'} strokeWidth={i < 6 ? 15 : 10} /></g>)}
-        <path d="M-20 384L244 367 410 335 559 317 850 300 1030 319" fill="none" stroke="#d6d9cc" strokeWidth="13" /><path d="M-20 384L244 367 410 335 559 317 850 300 1030 319" fill="none" stroke="#fffdf3" strokeWidth="10" />
+        <path d="M45 42L212 28 264 113 221 212 74 224 25 139Z" fill="#2c1a33" />
+        <path d="M631 257C686 223 766 241 780 299L757 387 668 414 611 356Z" fill="#2f1d36" />
+        <path d="M652 278C720 254 748 286 729 330S670 356 674 389" fill="none" stroke="#3a2140" strokeWidth="9" />
+        <path d="M382 363L469 345 508 406 451 438 391 419Z" fill="#2c1a33" />
+        <path d="M823 15L982 3 1008 132 904 153 835 100Z" fill="#2f1d36" />
+        <path d="M34 568L160 523 211 577 176 650 72 666Z" fill="#2c1a33" />
+        {streets.map((path, i) => <g key={i}><path d={path} fill="none" stroke={layer ? '#2c001e' : '#241229'} strokeWidth={i < 6 ? 19 : 13} /><path d={path} fill="none" stroke={layer ? '#3a2140' : '#4a2b52'} strokeWidth={i < 6 ? 15 : 10} /></g>)}
+        <path d="M-20 384L244 367 410 335 559 317 850 300 1030 319" fill="none" stroke="#2c001e" strokeWidth="13" /><path d="M-20 384L244 367 410 335 559 317 850 300 1030 319" fill="none" stroke="#5e2750" strokeWidth="10" />
         {!layer && neighborhoods.map(([name, lat, lng]) => { const pos = localProject({ lat, lng }); return <text key={name} x={pos.x} y={pos.y} textAnchor="middle" className="map-label">{name}</text>; })}
         <text x="128" y="129" className="map-park-label" textAnchor="middle">Makerere University</text>
         <text x="696" y="323" className="map-park-label" textAnchor="middle">Kololo Golf Course</text>
@@ -68,17 +68,17 @@ function IllustratedMap({ pickup, dropoff, drivers = [], trip, compact = false, 
         <text x="571" y="213" className="map-road-label">Kira Road</text>
       </> : <>
         <rect width="1000" height="760" fill="url(#map-dots)" />
-        <path d="M136 620L75 549 90 466 144 410 151 323 217 270 267 169 348 131 418 117 460 67 520 100 576 89 604 163 652 225 654 337 701 399 665 471 623 528 620 661 495 690 341 692 236 667Z" fill="#dce7d2" stroke="#b7c9ab" strokeWidth="3" />
-        <path d="M596 500C655 492 680 559 650 621L622 683 488 692 456 641 504 589 552 566Z" fill="#c5dfe2" />
+        <path d="M136 620L75 549 90 466 144 410 151 323 217 270 267 169 348 131 418 117 460 67 520 100 576 89 604 163 652 225 654 337 701 399 665 471 623 528 620 661 495 690 341 692 236 667Z" fill="#241229" stroke="#772953" strokeWidth="3" />
+        <path d="M596 500C655 492 680 559 650 621L622 683 488 692 456 641 504 589 552 566Z" fill="#1f2a44" />
         <text x="576" y="635" className="map-water-label" textAnchor="middle">Lake Victoria</text>
-        <path d="M230 617Q320 503 350 455T430 340M350 455L620 396M350 455L220 210M430 340L554 185" stroke="#fffef8" strokeWidth="7" fill="none" strokeDasharray="8 5" />
-        {[[ 'KAMPALA', .31, 32.58], ['ENTEBBE', .05, 32.46], ['JINJA', .45, 33.2], ['MBALA', 1.08, 34.17], ['GULU', 2.77, 32.3], ['ARUA', 3.02, 30.91], ['FORT PORTAL', .66, 30.27], ['MBARARA', -.6, 30.65]].map(([name, lat, lng]) => { const pt = countryProject({ lat: Number(lat), lng: Number(lng) }); return <g key={String(name)}><circle cx={pt.x} cy={pt.y} r="4" fill="#7f9876" /><text x={pt.x + 10} y={pt.y + 5} className="map-label">{name}</text></g>; })}
+        <path d="M230 617Q320 503 350 455T430 340M350 455L620 396M350 455L220 210M430 340L554 185" stroke="#772953" strokeWidth="7" fill="none" strokeDasharray="8 5" />
+        {[[ 'KAMPALA', .31, 32.58], ['ENTEBBE', .05, 32.46], ['JINJA', .45, 33.2], ['MBALA', 1.08, 34.17], ['GULU', 2.77, 32.3], ['ARUA', 3.02, 30.91], ['FORT PORTAL', .66, 30.27], ['MBARARA', -.6, 30.65]].map(([name, lat, lng]) => { const pt = countryProject({ lat: Number(lat), lng: Number(lng) }); return <g key={String(name)}><circle cx={pt.x} cy={pt.y} r="4" fill="#ff8a65" /><text x={pt.x + 10} y={pt.y + 5} className="map-label">{name}</text></g>; })}
         <text x="398" y="273" className="country-label" textAnchor="middle">UGANDA</text>
       </>}
-      {d && <><path d={route} fill="none" stroke="#fff" strokeWidth="9" strokeLinecap="round" strokeLinejoin="round" /><path d={route} fill="none" stroke="#217452" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" strokeDasharray={trip?.status === 'in_progress' ? '0' : '9 7'} /></>}
-      {drivers.filter(driver => central(driver.location) === isLocal).slice(0, 12).map((driver, i) => { const pos = project(driver.location); return <g key={driver.id} transform={`translate(${pos.x} ${pos.y})`} data-marker="driver"><circle r="20" fill="#fff" filter="url(#marker-shadow)" /><circle r="17" fill="#f9fcf7" /><g transform="translate(-10,-10)" color="#256348"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="5" cy="17" r="3"/><circle cx="19" cy="17" r="3"/><path d="M5 17l5-8 4 8h5l-4-10h-4M8 9h5M14 5h3"/></svg></g></g>; })}
-      <g transform={`translate(${p.x} ${p.y})`} data-marker="pickup"><circle r="40" fill="#277951" opacity=".09" /><circle r="27" fill="#277951" opacity=".1" /><circle r="13" fill="#fff" /><circle r="8" fill="#217452" />{!compact && <g transform="translate(-66,-64)"><rect width="132" height="35" rx="9" fill="#fff" filter="url(#marker-shadow)" /><text x="66" y="22" textAnchor="middle" className="map-marker-label">Your pickup</text><path d="M60 35l6 7 6-7" fill="#fff" /></g>}</g>
-      {d && <g transform={`translate(${d.x} ${d.y})`} data-marker="destination"><path d="M0 5C-7-7-18-15-18-27a18 18 0 1136 0C18-15 7-7 0 5Z" fill="#243c30" filter="url(#marker-shadow)" /><rect x="-6" y="-33" width="12" height="12" rx="3" fill="#fff" /></g>}
+      {d && <><path d={route} fill="none" stroke="#f7f3f7" strokeWidth="9" strokeLinecap="round" strokeLinejoin="round" /><path d={route} fill="none" stroke="#e95420" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" strokeDasharray={trip?.status === 'in_progress' ? '0' : '9 7'} /></>}
+      {drivers.filter(driver => central(driver.location) === isLocal).slice(0, 12).map((driver, i) => { const pos = project(driver.location); return <g key={driver.id} transform={`translate(${pos.x} ${pos.y})`} data-marker="driver"><circle r="20" fill="#f7f3f7" filter="url(#marker-shadow)" /><circle r="17" fill="#2c001e" /><g transform="translate(-10,-10)" color="#ff8a65"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="5" cy="17" r="3"/><circle cx="19" cy="17" r="3"/><path d="M5 17l5-8 4 8h5l-4-10h-4M8 9h5M14 5h3"/></svg></g></g>; })}
+      <g transform={`translate(${p.x} ${p.y})`} data-marker="pickup"><circle r="40" fill="#e95420" opacity=".09" /><circle r="27" fill="#e95420" opacity=".1" /><circle r="13" fill="#f7f3f7" /><circle r="8" fill="#e95420" />{!compact && <g transform="translate(-66,-64)"><rect width="132" height="35" rx="9" fill="#f7f3f7" filter="url(#marker-shadow)" /><text x="66" y="22" textAnchor="middle" className="map-marker-label">Your pickup</text><path d="M60 35l6 7 6-7" fill="#f7f3f7" /></g>}</g>
+      {d && <g transform={`translate(${d.x} ${d.y})`} data-marker="destination"><path d="M0 5C-7-7-18-15-18-27a18 18 0 1136 0C18-15 7-7 0 5Z" fill="#772953" filter="url(#marker-shadow)" /><rect x="-6" y="-33" width="12" height="12" rx="3" fill="#f7f3f7" /></g>}
     </svg>
     <div className="map-top"><span className="map-location"><MapPin size={15} /><strong>{isLocal ? 'Kampala, Uganda' : 'Uganda overview'}</strong><span className="map-live-dot" /></span><button className={`map-layer ${layer ? 'active' : ''}`} title="Toggle simplified map layer" aria-label="Toggle simplified map layer" onClick={() => setLayer(!layer)}><Layers size={19} /></button></div>
     {onPick && <div className="map-pick-hint">Tap the map to set your destination</div>}

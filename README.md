@@ -1,6 +1,6 @@
 # Trampo — Your city. Your ride.
 
-An Uganda-first, responsive ride-hailing application with a working Node/SQLite backend, React interface, GPS-verified trip starts, matched-only browser audio calling, role-specific profiles for admins/car drivers/motorbike riders/passengers, Google sign-in, driver onboarding, operations review, VIP selection, and Night Shield safety tools.
+An Uganda-first, responsive ride-hailing application with a dark, futuristic Ubuntu-font interface, a working Node/SQLite backend, React interface, GPS-verified trip starts, matched-only browser audio calling with incoming-call notifications, role-specific profiles for admins/car drivers/motorbike riders/passengers, Google sign-in, driver onboarding, operations review, VIP selection, and Night Shield safety tools.
 
 **Head office:** Plot 14 Martyrs Drive, Ntinda Ministers Village, Kampala, Uganda.
 
@@ -26,6 +26,10 @@ Without it, the app labels the fallback honestly and keeps the real device GPS.
 See **[docs/SUPABASE_LIVE.md](docs/SUPABASE_LIVE.md)** for setup, the server-enforced
 GPS/PIN start gate, matched-only calling, driver approval, the first admin account, and
 the remaining production limitations (SMTP, OTP, KYC, payments, TURN, emergency response).
+
+## Design
+
+Dark mode is the default. The interface uses the self-hosted Ubuntu font and an Ubuntu-inspired aubergine/orange palette with a prominent Trampo mark, glow accents, and dark Leaflet/illustrated maps. Call alert preferences are stored locally on the device.
 
 ## Run locally (demo)
 
@@ -80,6 +84,7 @@ A static GitHub Pages build is included: `npm run build:pages`, then `npm run pr
 - **Live route:** Leaflet/OpenStreetMap map with driver progress, up to five pending stops, passenger destination changes, driver stop arrival, and fare estimates recomputed through the stop sequence.
 - **Live sharing:** expiring/revocable read-only links include the route, stops and latest driver location, never phone numbers or the boarding PIN.
 - **Private calling:** real WebRTC audio, microphone permission, mute, answer/decline/hang-up, and WebSocket signaling. Only the matched passenger and driver can initiate or join; calls end when the trip ends. Phone numbers are not exchanged by the calling UI. Audio is not recorded.
+- **Incoming-call alerts:** explicit browser notification permission, system notification where supported, original ringtone, vibration where available, title flashing, and an in-app fallback. Alerts stop on answer/decline/end. They require the Trampo page to remain open and connected; closed-app push is not implemented.
 - Driver registration with vehicle, permit, and insurance references; pending review; operations approval/rejection; shift checklist; online/offline state; device GPS watch.
 - **Night Shield:** 19:00–06:00 East Africa Time, well-lit pickup confirmation, five-minute safety check-ins, and operations escalation two minutes after a missed check-in.
 - Trusted contacts, expiring/revocable read-only trip links, SOS alert recording, operations resolution notes, and trip audit events.

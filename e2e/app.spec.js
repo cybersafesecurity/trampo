@@ -107,6 +107,18 @@ test('driver registration is persisted and pending review', async ({ page }) => 
 test('matched participants can connect a real browser WebRTC audio call', async ({ browser, baseURL }) => {
   const passengerContext = await browser.newContext({ permissions: ['microphone'] });
   const driverContext = await browser.newContext({ permissions: ['microphone'] });
+  await driverContext.addInitScript(() => {
+    window.__callNotifications = []; window.__vibrations = [];
+    class MockNotification {
+      static permission = 'default';
+      static async requestPermission() { MockNotification.permission = 'granted'; return 'granted'; }
+      constructor(title, options) { this.title = title; this.options = options; this.closed = false; window.__callNotifications.push(this); }
+      close() { this.closed = true; }
+    }
+    Object.defineProperty(window, 'Notification', { value: MockNotification, configurable: true });
+    Object.defineProperty(navigator, 'vibrate', { value: pattern => { window.__vibrations.push(pattern); return true; }, configurable: true });
+    Object.defineProperty(navigator, 'serviceWorker', { value: undefined, configurable: true });
+  });
   const passenger = await passengerContext.newPage(), driver = await driverContext.newPage();
   await passenger.goto(baseURL); await expect(passenger.getByRole('heading', { name: 'Where are we going?' })).toBeVisible();
   await passenger.getByRole('button', { name: 'Garden City', exact: true }).click();
@@ -118,13 +130,27 @@ test('matched participants can connect a real browser WebRTC audio call', async 
   await driver.evaluate(async id => { await fetch('/api/demo/session', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Trampo-Client': 'web' }, body: JSON.stringify({ role: 'driver', userId: id }) }); }, driverId);
   await driver.goto(`${baseURL}/#drive`); await driver.reload();
   await expect(driver.getByRole('heading', { name: /Hello,/ })).toBeVisible();
+  await driver.getByRole('button', { name: 'View notifications' }).click();
+  await driver.getByRole('button', { name: 'Enable call notifications' }).click();
+  await expect(driver.getByRole('dialog')).toContainText('Enabled');
+  await driver.getByRole('button', { name: 'Close dialog' }).click();
   await passenger.getByRole('button', { name: 'Call driver for free' }).click();
   await expect(driver.getByRole('button', { name: 'Answer', exact: true })).toBeVisible();
+  await expect(driver.getByRole('alertdialog', { name: 'Private voice call' })).toBeVisible();
+  await expect.poll(() => driver.evaluate(() => window.__callNotifications.length)).toBe(1);
+  const alert = await driver.evaluate(() => ({ title: window.__callNotifications[0].title, tag: window.__callNotifications[0].options.tag, body: window.__callNotifications[0].options.body }));
+  expect(alert.title).toBe('Incoming Trampo call');
+  expect(alert.tag).toMatch(/^trampo-call-/);
+  expect(alert.body).toContain('calling you on Trampo');
+  expect(await driver.evaluate(() => window.__vibrations.length)).toBeGreaterThan(0);
   await driver.getByRole('button', { name: 'Answer', exact: true }).click();
+  await expect.poll(() => driver.evaluate(() => window.__callNotifications[0].closed)).toBe(true);
+  await expect(driver.getByRole('alertdialog', { name: 'Private voice call' })).toHaveCount(0);
   await expect(passenger.locator('.call-person p')).toContainText('Connected', { timeout: 30000 });
   await expect(driver.locator('.call-person p')).toContainText('Connected', { timeout: 30000 });
   await passenger.getByRole('button', { name: 'End call', exact: true }).click();
   await expect(passenger.locator('.call-overlay')).toHaveCount(0);
   await expect(driver.locator('.call-overlay')).toHaveCount(0);
+  expect(await driver.evaluate(() => window.__callNotifications[0].closed)).toBe(true);
   await passengerContext.close(); await driverContext.close();
 });

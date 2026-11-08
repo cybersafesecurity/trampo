@@ -64,7 +64,7 @@ A static GitHub Pages build is included: `npm run build:pages`, then `npm run pr
 3. A seed demo passenger is matched to a simulated driver. Expand **Demo controls** and choose **Simulate driver arrival**.
 4. Confirm **I’m in the right vehicle** in the passenger app. At night, also confirm a well-lit pickup point.
 5. Choose **Open driver controls**. The simulated driver's demo PIN is explicitly shown; enter it and choose **Verify & start trip**.
-6. The server independently checks both GPS fixes, passenger confirmation, the PIN, and the driver's shift checklist before changing the trip state.
+6. The server independently checks passenger confirmation, the PIN, and the driver's shift checklist before changing the trip state. Testing mode currently disables GPS distance/freshness/accuracy boarding gates.
 7. Try the free call, share a read-only trip link, or record a demo SOS alert.
 8. In driver controls, simulate arrival at the destination and complete the trip. Return to the passenger account to view the receipt and rate the journey.
 
@@ -76,7 +76,7 @@ A static GitHub Pages build is included: `npm run build:pages`, then `npm run pr
 - Boda, Comfort, and VIP ride selection; saved Uganda destinations and custom coordinates.
 - Immediate requests and scheduled requests (15 minutes to 30 days ahead), trip history, cancellation before start, receipts, and ratings.
 - Server-authoritative trip state and transactional driver acceptance; one active trip per participant.
-- **Start gate:** both location fixes must be ≤15 seconds old and accuracy ≤50 m; pickup distance is shown but not capped. The passenger must confirm boarding within two minutes, and the driver must supply the trip PIN. Five incorrect PIN attempts lock the start attempt.
+- **Start gate (testing mode):** GPS distance, freshness and accuracy no longer block boarding. The passenger must confirm boarding within two minutes, and the driver must supply the trip PIN. Five incorrect PIN attempts lock the start attempt. The driver's shift checklist and Night Shield acknowledgement still apply.
 - **Private calling:** real WebRTC audio, microphone permission, mute, answer/decline/hang-up, and WebSocket signaling. Only the matched passenger and driver can initiate or join; calls end when the trip ends. Phone numbers are not exchanged by the calling UI. Audio is not recorded.
 - Driver registration with vehicle, permit, and insurance references; pending review; operations approval/rejection; shift checklist; online/offline state; device GPS watch.
 - **Night Shield:** 19:00–06:00 East Africa Time, well-lit pickup confirmation, five-minute safety check-ins, and operations escalation two minutes after a missed check-in.

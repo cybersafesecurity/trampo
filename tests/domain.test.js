@@ -8,24 +8,17 @@ test('Haversine distance is symmetric and zero at the same point', () => {
   assert.ok(Math.abs(distanceMeters(pickup, fix(.0001)) - 11.12) < .1);
   assert.equal(distanceMeters(pickup, fix(.0001)), distanceMeters(fix(.0001), pickup));
 });
-test('GPS start requires fresh accurate fixes but has no pickup distance cap', () => {
-  assert.equal(gpsMatch(fix(), fix(.0002), now).matched, true);
-  assert.equal(gpsMatch(fix(), fix(.0004), now).matched, true);
-  assert.equal(gpsMatch(fix(), fix(.1), now).matched, true);
-  assert.equal(gpsMatch(fix(), fix(.1), now).threshold, null);
-  assert.equal(gpsMatch(fix(), fix(.1), now).reasons.includes('too_far'), false);
-  assert.equal(gpsMatch(null, fix(), now).matched, false);
-  assert.equal(gpsMatch(fix(), fix(0, { updatedAt: now - 15001 }), now).matched, false);
-  assert.equal(gpsMatch(fix(), fix(0, { updatedAt: now + 6000 }), now).matched, false);
-  assert.equal(gpsMatch(fix(), fix(0, { accuracy: 51 }), now).matched, false);
-  assert.equal(gpsMatch(fix(), fix(0, { accuracy: -1 }), now).matched, false);
-});
-test('Night mode adds no distance cap and never relaxes freshness/accuracy', () => {
-  assert.equal(gpsMatch(fix(), fix(.00025), now, true).matched, true);
-  assert.equal(gpsMatch(fix(), fix(.1), now, true).matched, true);
-  assert.equal(gpsMatch(fix(), fix(.1), now, true).threshold, null);
-  assert.equal(gpsMatch(fix(), fix(0, { updatedAt: 0 }), now, true).matched, false);
-  assert.equal(gpsMatch(fix(), fix(0, { accuracy: 51 }), now, true).matched, false);
+test('testing mode lets boarding verify without GPS freshness, accuracy or proximity gates', () => {
+  for (const m of [gpsMatch(fix(), fix(.1), now), gpsMatch(null, fix(), now), gpsMatch(fix(), null, now), gpsMatch(null, null, now), gpsMatch(fix(), fix(0, { updatedAt: now - 15001 }), now), gpsMatch(fix(), fix(0, { updatedAt: now + 6000 }), now), gpsMatch(fix(), fix(0, { accuracy: 51 }), now), gpsMatch(fix(), fix(0, { accuracy: -1 }), now), gpsMatch(fix(), fix(.1), now, true)]) {
+    assert.equal(m.matched, true);
+    assert.equal(m.testingBypass, true);
+    assert.deepEqual(m.reasons, []);
+    assert.equal(m.threshold, null);
+    assert.equal(m.maxAccuracy, null);
+    assert.equal(m.maxAgeSeconds, null);
+  }
+  assert.equal(gpsMatch(fix(), fix(.1), now).distance > 10000, true);
+  assert.equal(gpsMatch(null, null, now).distance, null);
 });
 test('Night Shield uses Uganda time, not the server timezone', () => {
   assert.equal(isNight(new Date('2026-01-01T16:00:00Z')), true); // 19:00 EAT

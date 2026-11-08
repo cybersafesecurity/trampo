@@ -36,7 +36,7 @@ test('authentication, CSRF protection, Uganda bounds and fare quotes', async t =
   await client('POST', '/api/location', { lat: 51.5, lng: -.1, accuracy: 8, source: 'browser' }, 400);
   const quotes = await client('POST', '/api/quotes', { pickup, dropoff }); assert.ok(quotes.vip.fare > quotes.comfort.fare && quotes.comfort.fare > quotes.boda.fare);
 });
-test('complete trip enforces match, PIN, passenger confirmation, calling window and rating', async t => {
+test('complete trip enforces PIN, passenger confirmation, calling window and rating with GPS boarding gates disabled', async t => {
   const { backend, client } = await setup(t), rider = client(), driver = client(), admin = client(), stranger = client();
   await passenger(rider);
   let trip = await requestRide(rider);
@@ -48,17 +48,14 @@ test('complete trip enforces match, PIN, passenger confirmation, calling window 
   trip = (await driver('POST', `/api/trips/${trip.id}/accept`, {})).trip;
   const pin = (await rider('GET', `/api/trips/${trip.id}`)).trip.pin;
   assert.match(pin, /^\d{4}$/); assert.equal(trip.pin, undefined);
-  await driver('POST', `/api/trips/${trip.id}/start`, { pin }, 409); // Too far.
-  await driver('POST', '/api/location', { ...pickup, lat: pickup.lat + .00006, accuracy: 8, source: 'simulated' });
-  saveFix(backend.db, 'demo-passenger', { ...pickup, accuracy: 51 }, 'simulated');
-  await driver('POST', `/api/trips/${trip.id}/start`, { pin }, 409); // Poor accuracy.
-  saveFix(backend.db, 'demo-passenger', { ...pickup, accuracy: 8 }, 'simulated', Date.now() - 20000);
-  await driver('POST', `/api/trips/${trip.id}/start`, { pin }, 409); // Stale.
-  await rider('POST', '/api/location', { ...pickup, accuracy: 8, source: 'simulated' });
-  await driver('POST', `/api/trips/${trip.id}/start`, { pin }, 409); // No passenger confirmation.
-  await rider('POST', `/api/trips/${trip.id}/confirm`, { identityChecked: true, safePickup: true });
+  // GPS distance/accuracy/freshness no longer block boarding in testing mode.
+  await driver('POST', '/api/location', { ...pickup, lat: pickup.lat + .1, accuracy: 500, source: 'simulated' });
+  saveFix(backend.db, 'demo-passenger', { ...pickup, accuracy: 500 }, 'simulated', Date.now() - 60000);
+  await driver('POST', `/api/trips/${trip.id}/start`, { pin }, 409); // Still requires passenger confirmation.
+  const confirmed = await rider('POST', `/api/trips/${trip.id}/confirm`, { identityChecked: true, safePickup: true });
+  assert.equal(confirmed.match.matched, true); assert.equal(confirmed.match.testingBypass, true);
   await driver('POST', `/api/trips/${trip.id}/start`, { pin: pin === '0000' ? '0001' : '0000' }, 400);
-  const started = await driver('POST', `/api/trips/${trip.id}/start`, { pin }); assert.equal(started.trip.status, 'in_progress'); assert.equal(started.match.threshold, null); assert.ok(!started.match.reasons.includes('too_far')); assert.ok(Number.isFinite(started.match.distance));
+  const started = await driver('POST', `/api/trips/${trip.id}/start`, { pin }); assert.equal(started.trip.status, 'in_progress'); assert.equal(started.match.threshold, null); assert.equal(started.match.testingBypass, true); assert.deepEqual(started.match.reasons, []); assert.ok(Number.isFinite(started.match.distance));
   await driver('POST', `/api/trips/${trip.id}/start`, { pin }, 409);
   await driver('POST', `/api/trips/${trip.id}/cancel`, { reason: 'Too late' }, 409);
   const call = await rider('POST', `/api/trips/${trip.id}/call`, {}); assert.equal(call.mode, 'webrtc-p2p');

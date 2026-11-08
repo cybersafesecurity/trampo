@@ -51,7 +51,7 @@ Express/SQLite server (`npm run dev`) remains a separate, clearly-labelled demo.
 Admin email: **trampo.the.app@gmail.com**. The old, never-used placeholder account was
 removed by a guarded migration; no trips, audit events or sessions were deleted.
 
-1. Open https://cybersafesecurity.github.io/trampo/ → **Create account** (or **Sign in →
+1. Open https://trampo.lat/ → **Create account** (or **Sign in →
    First time here? Set up admin account**).
 2. Use `trampo.the.app@gmail.com`, enter your name, and choose your own password
    (10–128 characters) in the password and confirmation fields. No default password exists.
@@ -161,5 +161,5 @@ server is **LiveKit** (Apache-2.0) with **coturn**; see `docs/ARCHITECTURE.md` a
 - `supabase/functions/trampo-api/index.ts` — the deployed Edge Function. It verifies the
   caller's Supabase JWT (except `/health`, `/config`, `/shared/*`), then calls the
   service-role-only `public.trampo_dispatch` RPC. CORS is restricted to
-  `TRAMPO_ALLOWED_ORIGINS`.
+  `TRAMPO_ALLOWED_ORIGINS` (including `https://trampo.lat` and `https://www.trampo.lat`).
 - The `trampo` schema is private; clients can only reach it through the Edge Function.

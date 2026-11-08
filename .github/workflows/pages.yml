@@ -36,6 +36,24 @@ jobs:
           VITE_SUPABASE_PUBLISHABLE_KEY: sb_publishable_Cp6uo1XC01OdaHeT5d8baw_9nnFkqhV
           # Public, referrer-restricted browser key; never use a server/API secret here.
           VITE_GOOGLE_MAPS_API_KEY: ${{ vars.VITE_GOOGLE_MAPS_API_KEY }}
+      - name: Register the custom domain in Pages settings
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          CNAME="$(tr -d '[:space:]' < public/CNAME)"
+          test "$CNAME" = 'trampo.lat'
+          # Actions-published Pages sites ignore an uploaded CNAME file. Register
+          # the same domain through the Pages settings API using pages: write.
+          CURRENT="$(gh api "repos/$GITHUB_REPOSITORY/pages" --jq '.cname // ""' 2>/dev/null || true)"
+          if [ "$CURRENT" != "$CNAME" ]; then
+            if ! REGISTERED="$(gh api --method PUT "repos/$GITHUB_REPOSITORY/pages" -f cname="$CNAME" -f build_type=workflow --jq .cname)"; then
+              echo "::error::Could not register $CNAME in Pages settings. A repository admin must open Settings > Pages, set Custom domain to $CNAME, save, then re-run this workflow."
+              exit 1
+            fi
+            test "$REGISTERED" = "$CNAME"
+          fi
+      - name: Verify the custom-domain artifact
+        run: node scripts/check-pages.mjs
       - name: Configure Pages
         uses: actions/configure-pages@v5
       - name: Upload artifact

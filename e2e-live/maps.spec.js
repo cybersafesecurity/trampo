@@ -33,7 +33,7 @@ async function setup(page, { geocodeFail = false, tilesFail = false } = {}) {
     if (url.pathname.endsWith('/trampo-api/location')) return json({ location: { lat: 0.3354, lng: 32.5769, accuracy: 8, source: 'browser', updatedAt: Date.now() } });
     return json({ error: `Unexpected ${url.pathname}` }, 500);
   });
-  await page.goto('/trampo/');
+  await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Where are we going?' })).toBeVisible();
   return errors;
 }

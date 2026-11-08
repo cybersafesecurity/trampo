@@ -10,12 +10,11 @@ A start request is accepted only when all of these hold:
 
 1. The caller is the assigned driver and the trip is `assigned`.
 2. The four-digit trip PIN matches a salted scrypt hash; attempts are limited.
-3. Both participant fixes are inside Uganda, at most 15 seconds old, not future-dated, and have reported accuracy at most 50 m.
-4. Haversine separation is recorded for the trip audit log but is not capped.
+3. Testing mode: GPS freshness, accuracy, Uganda bounds for the boarding match, and proximity no longer block start. Haversine separation is recorded when both fixes exist, but is not capped or required.
 5. The passenger confirmed the vehicle within the previous 120 seconds; night trips also require a well-lit pickup acknowledgement.
 6. The driver's shift checklist is less than 12 hours old.
 
-The demo shortcut for passenger confirmation still requires a GPS match and is unavailable outside explicitly simulated demo trips. Production mode rejects all simulated location reports. Nevertheless, a malicious client can lie about GPS/source/accuracy; device attestation and anti-spoofing are required before launch.
+The demo shortcut for passenger confirmation is unavailable outside explicitly simulated demo trips; it no longer requires a GPS match in testing mode. Production mode rejects all simulated location reports. Nevertheless, a malicious client can lie about GPS/source/accuracy; device attestation and anti-spoofing are required before launch.
 
 ## Location and map honesty
 

@@ -36,17 +36,12 @@ export function quote(pickup, dropoff, service = 'boda') {
   const fare = Math.max(rate.minimum, Math.ceil((rate.base + km * rate.perKm + minutes * rate.perMinute) / 500) * 500);
   return { distanceKm: km, minutes, fare, currency: 'UGX', estimate: true };
 }
-export function gpsMatch(riderFix, driverFix, now = Date.now(), _night = false) {
-  const reasons = [];
-  for (const [role, fix] of [['passenger', riderFix], ['driver', driverFix]]) {
-    if (!fix || !inUganda(fix)) reasons.push(`${role}_missing`);
-    else {
-      if (!Number.isFinite(fix.updatedAt) || now - fix.updatedAt > GPS_MAX_AGE_MS || fix.updatedAt > now + 5000) reasons.push(`${role}_stale`);
-      if (!Number.isFinite(fix.accuracy) || fix.accuracy < 0 || fix.accuracy > GPS_MAX_ACCURACY) reasons.push(`${role}_inaccurate`);
-    }
-  }
+// Testing mode: boarding no longer waits for GPS freshness, accuracy or proximity.
+// The PIN, passenger confirmation, shift checklist and Night Shield acknowledgement
+// still run server-side. Dispatch eligibility keeps its own availability GPS checks.
+export function gpsMatch(riderFix, driverFix, _now = Date.now(), _night = false) {
   const distance = distanceMeters(riderFix, driverFix);
-  return { matched: reasons.length === 0 && Number.isFinite(distance), distance: Number.isFinite(distance) ? Math.round(distance) : null, threshold: null, reasons, maxAccuracy: GPS_MAX_ACCURACY, maxAgeSeconds: GPS_MAX_AGE_MS / 1000 };
+  return { matched: true, distance: Number.isFinite(distance) ? Math.round(distance) : null, threshold: null, reasons: [], maxAccuracy: null, maxAgeSeconds: null, testingBypass: true };
 }
 /**
  * Dispatch ranking. Availability is an eligibility gate; among available

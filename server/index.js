@@ -347,9 +347,8 @@ export function createBackend(options = {}) {
     const input = z.object({ identityChecked: z.literal(true), safePickup: z.boolean().optional() }).parse(req.body);
     if (req.trip.night_mode) assert(input.safePickup === true, 400, 'Confirm that you are meeting at a well-lit pickup point.');
     const match = gpsMatch(fix(db, req.trip.rider_id), fix(db, req.trip.driver_id), Date.now(), !!req.trip.night_mode);
-    assert(match.matched, 409, 'Your GPS locations are not ready yet. Refresh both locations and try again.', 'GPS_NOT_MATCHED', match);
     db.prepare('UPDATE trips SET rider_confirmed_at=? WHERE id=?').run(Date.now(), req.trip.id);
-    event(db, req.trip.id, req.user.id, 'passenger_confirmed', { distance: match.distance }); refresh(); res.json({ ok: true, match });
+    event(db, req.trip.id, req.user.id, 'passenger_confirmed', { distance: match.distance, gpsGate: 'disabled_for_testing' }); refresh(); res.json({ ok: true, match });
   }));
   app.post('/api/trips/:id/start', tripAuth, route((req, res) => {
     assert(req.user.id === req.trip.driver_id && req.trip.status === 'assigned', 409, 'Only the assigned driver can start this trip.');
@@ -360,7 +359,6 @@ export function createBackend(options = {}) {
     if (!pinOK) { db.prepare('UPDATE trips SET pin_attempts=pin_attempts+1 WHERE id=?').run(req.trip.id); event(db, req.trip.id, req.user.id, 'pin_rejected'); }
     assert(pinOK, 400, 'That boarding PIN is not correct. Ask the passenger for their Trampo PIN.', 'PIN_INVALID');
     const match = gpsMatch(fix(db, req.trip.rider_id), fix(db, req.trip.driver_id), Date.now(), !!req.trip.night_mode);
-    assert(match.matched, 409, 'Trip cannot start: both phones need fresh, accurate GPS.', 'GPS_NOT_MATCHED', match);
     assert(req.trip.rider_confirmed_at && Date.now() - req.trip.rider_confirmed_at <= 120000, 409, 'Ask the passenger to confirm the vehicle and boarding in their app.', 'PASSENGER_NOT_CONFIRMED');
     const d = driver(db, req.user.id);
     assert(d.shift_check_at && Date.now() - d.shift_check_at < 12 * 3600000, 403, 'Complete your shift safety checklist first.');
@@ -368,7 +366,7 @@ export function createBackend(options = {}) {
       const current = trip(db, req.trip.id);
       assert(current.status === 'assigned', 409, 'Trip already started.');
       db.prepare("UPDATE trips SET status='in_progress',started_at=?,start_distance=?,last_checkin_at=? WHERE id=?").run(Date.now(), match.distance, Date.now(), req.trip.id);
-      event(db, req.trip.id, req.user.id, 'trip_started', { distance: match.distance, threshold: match.threshold, pinVerified: true, passengerConfirmed: true });
+      event(db, req.trip.id, req.user.id, 'trip_started', { distance: match.distance, threshold: match.threshold, pinVerified: true, passengerConfirmed: true, gpsGate: 'disabled_for_testing' });
     });
     refresh(); res.json({ trip: serializeTrip(trip(db, req.trip.id), req.user.id), match });
   }));
@@ -487,7 +485,6 @@ export function createBackend(options = {}) {
     assert(demo && req.trip.simulated && req.trip.status === 'assigned', 403, 'Only an explicitly simulated trip can use this demo shortcut.');
     assert(participant(req.trip, req.user.id), 403, 'Not your demo trip.');
     const match = gpsMatch(fix(db, req.trip.rider_id), fix(db, req.trip.driver_id), Date.now(), !!req.trip.night_mode);
-    assert(match.matched, 409, 'Both demo GPS locations must match before confirming.', 'GPS_NOT_MATCHED', match);
     db.prepare('UPDATE trips SET rider_confirmed_at=? WHERE id=?').run(Date.now(), req.trip.id);
     event(db, req.trip.id, req.trip.rider_id, 'demo_passenger_confirmed', { distance: match.distance }); refresh(); res.json({ ok: true });
   }));

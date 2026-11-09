@@ -13,3 +13,6 @@ coverage/
 artifacts/
 *.tsbuildinfo
 .DS_Store
+
+# Generated single-file Edge deploy artifact
+.edge-build/

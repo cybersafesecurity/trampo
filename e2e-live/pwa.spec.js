@@ -67,8 +67,11 @@ test('PWA manifest, icons and offline shell are published without caching accoun
   await expect(page.getByRole('heading', { name: 'Let’s get you back online.' })).toBeVisible();
   await expect(page.getByText('For your safety, Trampo does not show cached driver locations')).toBeVisible();
   await context.setOffline(false);
-  // Reconnect explicitly instead of racing the offline page's `online` auto-reload.
-  await page.goto('/');
+  // The offline page reloads on `online`; wait for that real navigation rather
+  // than starting a second one that Chromium can abort mid-flight.
+  const reconnected = page.waitForEvent('load');
+  await context.setOffline(false);
+  await reconnected;
   await expect(page.getByRole('heading', { name: 'Welcome to Trampo.' })).toBeVisible();
   expect(errors).toEqual([]);
 });

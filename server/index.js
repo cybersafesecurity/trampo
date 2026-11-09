@@ -7,6 +7,8 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { z } from 'zod';
 import { openStore, hashPassword, checkPassword, user, userProfile, driver, fix, saveFix, event, activeTrip, trip, setting, setSetting, transaction, accountType } from './store.js';
 import { createGoogleAuth } from './google.js';
+import { createPhotonProxy } from './photonProxy.js';
+import { createMeteredRelay, hasRelay, meteredConfig, staleRelay, usableRelay, METERED_ROTATE_AFTER_MS } from './metered.js';
 import { inUganda, distanceMeters, isNight, quote, gpsMatch, routeQuote, dispatchCandidates, interpolate, BOARDING_MAX_DISTANCE, normalizePhone, publicUser, SERVICES, OFFICE } from './domain.js';
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
@@ -27,6 +29,9 @@ export function createBackend(options = {}) {
   const demo = options.demo ?? (process.env.DEMO_MODE !== 'false' && process.env.NODE_ENV !== 'production');
   const db = openStore(options.dbPath ?? process.env.DATABASE_PATH ?? resolve(root, 'data/trampo.sqlite'), demo);
   const google = createGoogleAuth(db, options);
+  const serviceEnv = options.env ?? process.env;
+  const photonLookup = createPhotonProxy({ base: options.photonUrl ?? serviceEnv.PHOTON_URL, fetcher: options.photonFetch ?? fetch });
+  let relayCache = null, relayRefresh = null;
   const app = express();
   const server = createServer(app);
   const wss = new WebSocketServer({ noServer: true, maxPayload: 24 * 1024 });
@@ -87,8 +92,9 @@ export function createBackend(options = {}) {
   function participant(t, uid) { return t && (t.rider_id === uid || t.driver_id === uid); }
   function callActive(t) { return t && ['assigned', 'in_progress'].includes(t.status); }
   function endCalls(t, reason = 'trip_ended') {
+    const active = db.prepare("SELECT id FROM calls WHERE trip_id=? AND status IN ('ringing','connected')").get(t.id);
     db.prepare("UPDATE calls SET status='ended',ended_at=? WHERE trip_id=? AND status IN ('ringing','connected')").run(Date.now(), t.id);
-    for (const uid of [t.rider_id, t.driver_id]) if (uid) sendTo(uid, { type: 'call-ended', tripId: t.id, reason });
+    for (const uid of [t.rider_id, t.driver_id]) if (uid) sendTo(uid, { type: 'call-ended', tripId: t.id, callId: active?.id || '', reason });
   }
   function serializeTrip(t, uid) {
     if (!t) return null;
@@ -301,6 +307,12 @@ export function createBackend(options = {}) {
   app.post('/api/quotes', auth, route((req, res) => {
     const input = z.object({ pickup: positionSchema, dropoff: positionSchema }).parse(req.body);
     res.json(Object.fromEntries(Object.keys(SERVICES).map(s => [s, quote(input.pickup, input.dropoff, s)])));
+  }));
+  app.get('/api/places/:kind', auth, route(async (req, res) => {
+    rateBucket(`places:${req.user.id}`, 20);
+    rateBucket('places:global', 60);
+    const query = new URLSearchParams(Object.entries(req.query).filter(([, value]) => typeof value === 'string'));
+    res.json(await photonLookup(req.params.kind, query));
   }));
   app.post('/api/trips', auth, route((req, res) => {
     rateBucket(`book:${req.user.id}`, 10);
@@ -548,7 +560,7 @@ export function createBackend(options = {}) {
     db.prepare('UPDATE trips SET rider_confirmed_at=? WHERE id=?').run(Date.now(), req.trip.id);
     event(db, req.trip.id, req.trip.rider_id, 'demo_passenger_confirmed', { distance: match.distance }); refresh(); res.json({ ok: true });
   }));
-  app.post('/api/trips/:id/call', tripAuth, route((req, res) => {
+  app.post('/api/trips/:id/call', tripAuth, route(async (req, res) => {
     assert(participant(req.trip, req.user.id) && callActive(req.trip), 403, 'Free calling is available only to the matched passenger and driver, until the trip ends.');
     let call = db.prepare("SELECT * FROM calls WHERE trip_id=? AND status IN ('ringing','connected')").get(req.trip.id);
     if (call && call.initiated_by !== req.user.id && call.status === 'ringing') assert(false, 409, 'The other participant is already calling. Answer the incoming call instead.');
@@ -556,11 +568,11 @@ export function createBackend(options = {}) {
       const cid = id(); db.prepare("INSERT INTO calls(id,trip_id,initiated_by,status,started_at) VALUES(?,?,?,'ringing',?)").run(cid, req.trip.id, req.user.id, Date.now());
       call = db.prepare('SELECT * FROM calls WHERE id=?').get(cid); event(db, req.trip.id, req.user.id, 'call_started');
     }
-    res.json({ callId: call.id, initiator: call.initiated_by, mode: 'webrtc-p2p', iceServers: iceConfig(), expiresInSeconds: 60 });
+    res.json({ callId: call.id, initiator: call.initiated_by, mode: 'webrtc-p2p', iceServers: await iceConfig(), expiresInSeconds: 60 });
   }));
-  app.get('/api/trips/:id/call/config', tripAuth, route((req, res) => {
+  app.get('/api/trips/:id/call/config', tripAuth, route(async (req, res) => {
     assert(participant(req.trip, req.user.id) && callActive(req.trip), 403, 'Calling is only available during a matched trip.');
-    res.json({ iceServers: iceConfig() });
+    res.json({ iceServers: await iceConfig() });
   }));
   app.post('/api/trips/:id/call/answer', tripAuth, route((req, res) => {
     assert(participant(req.trip, req.user.id) && callActive(req.trip), 403, 'Calling is only available to the matched passenger and driver, until the trip ends.');
@@ -570,10 +582,26 @@ export function createBackend(options = {}) {
     event(db, req.trip.id, req.user.id, 'call_answered'); refresh();
     res.json({ ok: true, callId: call.id });
   }));
-  function iceConfig() {
+  async function iceConfig() {
     const servers = [];
-    if (process.env.STUN_URL !== '') servers.push({ urls: process.env.STUN_URL || 'stun:stun.l.google.com:19302' });
-    if (process.env.TURN_URLS) servers.push({ urls: process.env.TURN_URLS.split(','), username: process.env.TURN_USERNAME, credential: process.env.TURN_CREDENTIAL });
+    if (serviceEnv.STUN_URL !== '') servers.push({ urls: serviceEnv.STUN_URL || 'stun:stun.l.google.com:19302' });
+    if (serviceEnv.TURN_URLS && serviceEnv.TURN_USERNAME && serviceEnv.TURN_CREDENTIAL) {
+      const staticRelay = { urls: serviceEnv.TURN_URLS.split(',').map(s => s.trim()).filter(Boolean), username: serviceEnv.TURN_USERNAME, credential: serviceEnv.TURN_CREDENTIAL };
+      if (hasRelay([staticRelay])) servers.push(staticRelay);
+    }
+    let config = null;
+    try { config = meteredConfig(serviceEnv); } catch { console.error('[calls] Metered relay configuration is incomplete.'); }
+    if (config) {
+      const now = Date.now();
+      if (usableRelay(relayCache, now) && now - relayCache.createdAt < METERED_ROTATE_AFTER_MS) return [...servers, ...relayCache.servers];
+      if (!relayRefresh) relayRefresh = createMeteredRelay(config, options.meteredFetch ?? fetch)
+        .then(cache => { relayCache = cache; return cache; })
+        .catch(() => { console.error('[calls] Metered relay refresh failed; using any configured static fallback.'); return null; })
+        .finally(() => { relayRefresh = null; });
+      if (usableRelay(relayCache, now)) { void relayRefresh; return [...servers, ...relayCache.servers]; }
+      if (staleRelay(relayCache, now)) await relayRefresh;
+      if (usableRelay(relayCache)) return [...servers, ...relayCache.servers];
+    }
     return servers;
   }
   app.post('/api/trips/:id/call/end', tripAuth, route((req, res) => { endCalls(req.trip, 'hangup'); res.json({ ok: true }); }));
@@ -604,7 +632,7 @@ export function createBackend(options = {}) {
         try {
           const msg = JSON.parse(raw.toString());
           if (msg.type === 'ping') { ws.send('{"type":"pong"}'); return; }
-          if (!['call-offer', 'call-answer', 'call-ice', 'call-end'].includes(msg.type)) return;
+          if (!['call-offer', 'call-answer', 'call-ice', 'call-ready', 'call-end'].includes(msg.type)) return;
           const t = trip(db, msg.tripId);
           if (!participant(t, u.id) || !callActive(t) || typeof msg.callId !== 'string') return;
           const call = db.prepare('SELECT * FROM calls WHERE id=? AND trip_id=?').get(msg.callId, t.id);
@@ -612,12 +640,13 @@ export function createBackend(options = {}) {
           const other = u.id === t.rider_id ? t.driver_id : t.rider_id;
           if (msg.offer && (msg.offer.type !== 'offer' || typeof msg.offer.sdp !== 'string')) return;
           if (msg.answer && (msg.answer.type !== 'answer' || typeof msg.answer.sdp !== 'string')) return;
-          if (msg.type === 'call-offer' && call.initiated_by === u.id) sendTo(other, { type: 'call-offer', tripId: t.id, callId: call.id, offer: msg.offer, caller: publicUser(u) });
+          if (msg.type === 'call-offer' && call.initiated_by === u.id) sendTo(other, { type: 'call-offer', tripId: t.id, callId: call.id, signalId: msg.signalId, offer: msg.offer, caller: publicUser(u) });
           if (msg.type === 'call-answer' && call.initiated_by !== u.id && call.status !== 'ended') {
             db.prepare("UPDATE calls SET status='connected',answered_at=coalesce(answered_at,?) WHERE id=?").run(Date.now(), call.id);
-            sendTo(other, { type: 'call-answer', callId: call.id, answer: msg.answer });
+            sendTo(other, { type: 'call-answer', tripId: t.id, callId: call.id, signalId: msg.signalId, answer: msg.answer });
           }
-          if (msg.type === 'call-ice') sendTo(other, { type: 'call-ice', callId: call.id, candidate: msg.candidate });
+          if (msg.type === 'call-ice') sendTo(other, { type: 'call-ice', tripId: t.id, callId: call.id, signalId: msg.signalId, candidate: msg.candidate });
+          if (msg.type === 'call-ready') sendTo(other, { type: 'call-ready', tripId: t.id, callId: call.id, signalId: msg.signalId });
           if (msg.type === 'call-end') endCalls(t, 'hangup');
         } catch { /* Untrusted signaling payloads are ignored. */ }
       });
@@ -692,7 +721,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     const vite = await createViteServer({ root, server: { middlewareMode: true, hmr: { server }, allowedHosts: true }, appType: 'spa' });
     app.use(vite.middlewares);
   }
-  const port = Number(process.env.PORT || 3000);
+  const port = Number(process.env.PORT || 3002);
   server.listen(port, '0.0.0.0', () => console.log(`Trampo ${demo ? 'DEMO' : 'production'} ready on http://0.0.0.0:${port}`));
   for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, async () => { await backend.close(); process.exit(0); });
 }

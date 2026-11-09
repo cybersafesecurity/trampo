@@ -7,19 +7,43 @@ const user = { id: '00000000-0000-4000-8000-000000000002', aud: 'authenticated',
 const session = { access_token: 'mock-access-token', refresh_token: 'mock-refresh-token', expires_at: Math.floor(Date.now()/1000)+3600, expires_in: 3600, token_type: 'bearer', user };
 const publicUser = { id: user.id, name: 'Maps Passenger', role: 'passenger', accountType: 'passenger', phone: '+256772000200', initials: 'MP', avatarUrl: '' };
 const bootstrap = { user: publicUser, profile: { ...publicUser, email: user.email, emailVerified: true, phoneVerified: true, googleLinked: false, hasPassword: true, city: 'Kampala', bio: '', preferredService: null, accessibilityNote: '', jobTitle: '', department: '', status: 'active', isDemo: false, createdAt: Date.now(), updatedAt: Date.now(), driver: null }, googleSignIn: false, driver: null, demo: false, night: false, nightPreview: false, office: 'Ntinda', location: null, activeTrip: null, trips: [], upcoming: [], nearby: [], offers: [], contacts: [], operations: null, serverTime: Date.now() };
+const feature = { geometry: { coordinates: [32.5825, .3136] }, properties: { name: 'Cafe Javas', street: 'Acacia Avenue', city: 'Kampala', countrycode: 'UG', osm_value: 'cafe' } };
 const mapsScript = `
 window.google = window.google || {}; window.google.maps = window.google.maps || {};
 const m = window.google.maps;
 m.importLibrary = async () => ({});
+m.places = {
+  AutocompleteSessionToken: class {},
+  AutocompleteSuggestion: {
+    async fetchAutocompleteSuggestions(request) {
+      window.__autocompleteRequest = request;
+      window.__autocompleteCount = (window.__autocompleteCount || 0) + 1;
+      if (window.__autocompleteFail) throw new Error('mock autocomplete outage');
+      return { suggestions: [{ placePrediction: {
+        mainText: { text: 'Cafe Javas' }, secondaryText: { text: 'Acacia Avenue, Kampala' }, text: { text: 'Cafe Javas, Acacia Avenue, Kampala' },
+        toPlace() { return { async fetchFields({ fields }) {
+          window.__placeFields = fields;
+          this.displayName = 'Cafe Javas'; this.formattedAddress = 'Acacia Avenue, Kisementi, Kampala, Uganda';
+          this.location = { lat: () => 0.3136, lng: () => 32.5825 };
+          this.addressComponents = [
+            { longText: 'Cafe Javas', shortText: 'Cafe Javas', types: ['establishment', 'point_of_interest'] },
+            { longText: 'Kampala', shortText: 'Kampala', types: ['locality'] },
+            { longText: 'Uganda', shortText: 'UG', types: ['country', 'political'] },
+          ];
+        } }; },
+      } }] };
+    },
+  },
+};
 m.Geocoder = class { async geocode(request) { window.__geocodeRequest = request; if (window.__geocodeFail) throw new Error('mock outage'); return { results: [{ formatted_address: 'Acacia Avenue, Kisementi, Kampala, Uganda', address_components: [{ long_name: 'Acacia Avenue', short_name: 'Acacia Avenue', types: ['route'] }, { long_name: 'Kampala', short_name: 'Kampala', types: ['locality'] }, { long_name: 'Uganda', short_name: 'UG', types: ['country', 'political'] }] }] }; } };
 m.__ib__();
 `;
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVRPmP8/xAMAAK7sM9kAAAAASUVORK5CYII=', 'base64');
-async function setup(page, { geocodeFail = false, tilesFail = false } = {}) {
+async function setup(page, { geocodeFail = false, tilesFail = false, autocompleteFail = false, photonSearch = false } = {}) {
   const errors = []; page.on('pageerror', e => errors.push(e.message));
   await page.context().grantPermissions(['geolocation']);
   await page.context().setGeolocation({ latitude: 0.3354, longitude: 32.5769, accuracy: 8 });
-  await page.addInitScript(({ fail, session }) => { window.__geocodeFail = fail; localStorage.setItem('sb-euknlccrsfvuaymuecpd-auth-token', JSON.stringify(session)); }, { fail: geocodeFail, session });
+  await page.addInitScript(({ fail, autocompleteFail, session }) => { window.__geocodeFail = fail; window.__autocompleteFail = autocompleteFail; if (location.protocol.startsWith('http')) localStorage.setItem('sb-euknlccrsfvuaymuecpd-auth-token', JSON.stringify(session)); }, { fail: geocodeFail, autocompleteFail, session });
   await page.route('https://tile.openstreetmap.org/**', route => tilesFail ? route.abort() : route.fulfill({ contentType: 'image/png', body: PNG }));
   await page.route('https://maps.googleapis.com/maps/api/js?**', route => route.fulfill({ contentType: 'application/javascript', body: mapsScript }));
   await page.route(`${ORIGIN}/**`, async route => {
@@ -31,6 +55,8 @@ async function setup(page, { geocodeFail = false, tilesFail = false } = {}) {
     if (url.pathname === '/auth/v1/settings') return json({ external: { email: true, google: false } });
     if (url.pathname.endsWith('/trampo-api/bootstrap')) return json(bootstrap);
     if (url.pathname.endsWith('/trampo-api/location')) return json({ location: { lat: 0.3354, lng: 32.5769, accuracy: 8, source: 'browser', updatedAt: Date.now() } });
+    if (url.pathname.endsWith('/trampo-api/places/search')) return photonSearch ? json({ features: [feature] }) : json({ error: 'Address lookup is temporarily unavailable.' }, 503);
+    if (url.pathname.endsWith('/trampo-api/places/reverse')) return json({ error: 'Address lookup is temporarily unavailable.' }, 503);
     return json({ error: `Unexpected ${url.pathname}` }, 500);
   });
   await page.goto('/');
@@ -43,7 +69,7 @@ async function useCurrentLocation(page) {
   await expect(page.getByRole('dialog')).toHaveCount(0);
 }
 
-test('current location keeps the device fix, resolves a Google address and renders the Leaflet pickup marker', async ({ page }) => {
+test('current location keeps the device fix, then typed Google autocomplete resolves only the selected place', async ({ page }) => {
   const errors = await setup(page);
   await useCurrentLocation(page);
   await expect(page.locator('.route-field').first()).toContainText('Acacia Avenue, Kampala');
@@ -51,6 +77,21 @@ test('current location keeps the device fix, resolves a Google address and rende
   await expect(page.locator('.trampo-marker').first()).toBeVisible();
   const request = await page.evaluate(() => window.__geocodeRequest);
   expect(request.location).toEqual({ lat: 0.3354, lng: 32.5769 });
+
+  // Geocoding was imported first; autocomplete must still load the places library.
+  await page.locator('.destination-field').click();
+  await page.getByLabel('Search destinations').fill('Cafe Javas');
+  const result = page.locator('.place-result', { hasText: 'Cafe Javas' });
+  await expect(result).toBeVisible();
+  await expect(result).toContainText('Google Maps');
+  expect(await page.evaluate(() => window.__placeFields)).toBeUndefined();
+  const autocomplete = await page.evaluate(() => ({ region: window.__autocompleteRequest.includedRegionCodes, token: !!window.__autocompleteRequest.sessionToken }));
+  expect(autocomplete.region).toEqual(['ug']); expect(autocomplete.token).toBe(true);
+  await result.click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.locator('.destination-field')).toContainText('Cafe Javas, Kampala');
+  const fields = await page.evaluate(() => window.__placeFields);
+  expect(fields).toEqual(expect.arrayContaining(['displayName', 'formattedAddress', 'location', 'addressComponents']));
   expect(errors).toEqual([]);
 });
 
@@ -68,5 +109,19 @@ test('an OpenStreetMap tile outage falls back honestly to the illustrated map', 
   await expect(page.getByText('Map tiles unavailable · illustrated fallback')).toBeVisible({ timeout: 30000 });
   await useCurrentLocation(page);
   await expect(page.locator('.route-field').first()).toContainText('Acacia Avenue, Kampala');
+  expect(errors).toEqual([]);
+});
+
+test('a Google autocomplete outage falls back to labelled OpenStreetMap search without inventing a saved place', async ({ page }) => {
+  const errors = await setup(page, { autocompleteFail: true, photonSearch: true });
+  await page.locator('.destination-field').click();
+  await page.getByLabel('Search destinations').fill('Cafe Javas');
+  const result = page.locator('.place-result', { hasText: 'Cafe Javas, Kampala' });
+  await expect(result).toBeVisible();
+  await expect(result).toContainText('OpenStreetMap');
+  await expect(page.locator('.geocoder-attribution')).toContainText('OpenStreetMap contributors');
+  await result.click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.locator('.destination-field')).toContainText('Cafe Javas, Kampala');
   expect(errors).toEqual([]);
 });

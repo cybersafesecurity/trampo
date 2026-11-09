@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { RealtimeChannel } from '@supabase/supabase-js';
+import { CallPeer } from './callPeer';
+import { CallTransport } from './callTransport';
+import { CALL_TIMEOUT_MS, IceQueue, validSignal, type CallSignal } from './callProtocol';
 import { api } from './lib';
 import { isStaticDemo } from './staticDemo';
 import { isSupabaseLive, supabase, supabaseConfigError } from './supabase';
@@ -14,14 +17,18 @@ export function useTrampo() {
   const [call, setCall] = useState<CallState>({ status: 'idle' });
   const ws = useRef<WebSocket | null>(null);
   const channel = useRef<RealtimeChannel | null>(null);
-  const pc = useRef<RTCPeerConnection | null>(null);
-  const stream = useRef<MediaStream | null>(null);
-  const audio = useRef<HTMLAudioElement | null>(null);
+  const peerSession = useRef<CallPeer | null>(null);
+  const channelReady = useRef(false);
+  const signalEpoch = useRef(0);
+  const mounted = useRef(true);
+  const handleSignalRef = useRef<(message: unknown) => Promise<void>>(async () => {});
   const callRef = useRef(call); callRef.current = call;
   const dataRef = useRef(data); dataRef.current = data;
   const [callAlerts, setCallAlertsState] = useState<CallAlertPreferences>(readCallAlerts);
   const [callPermission, setCallPermission] = useState<CallAlertPermission>(notificationPermission);
-  const pendingIce = useRef<RTCIceCandidateInit[]>([]);
+  const pendingIce = useRef(new IceQueue());
+  const seenSignals = useRef(new Set<string>());
+  const incomingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const incomingOffer = useRef<RTCSessionDescriptionInit | null>(null);
   const callTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const notify = useCallback((text: string, kind: 'success' | 'error' | 'info' = 'success') => setToast({ text, kind }), []);
@@ -55,26 +62,38 @@ export function useTrampo() {
     return () => { alive = false; };
   }, [reload]);
   useEffect(() => { if (!toast) return; const timer = setTimeout(() => setToast(null), 5500); return () => clearTimeout(timer); }, [toast]);
-  const cleanupCall = useCallback(() => {
+  const clearCallResources = useCallback(() => {
+    signalEpoch.current++;
     stopIncomingCallAlert();
-    if (callTimeout.current) clearTimeout(callTimeout.current);
-    pc.current?.close(); pc.current = null;
-    stream.current?.getTracks().forEach(t => t.stop()); stream.current = null;
-    if (audio.current) { audio.current.srcObject = null; audio.current.remove(); audio.current = null; }
-    pendingIce.current = []; setCall({ status: 'idle' });
+    if (incomingTimer.current) clearTimeout(incomingTimer.current);
+    incomingTimer.current = null;
+    peerSession.current?.close(); peerSession.current = null;
+    pendingIce.current.clear(); incomingOffer.current = null; seenSignals.current.clear();
   }, []);
-  const sendSignal = useCallback((msg: unknown) => {
-    if (isSupabaseLive) channel.current?.send({ type: 'broadcast', event: 'signal', payload: msg });
-    else ws.current?.send(JSON.stringify(msg));
-  }, []);
-  const endCall = useCallback(() => {
+  const cleanupCall = useCallback(() => {
+    clearCallResources();
+    if (mounted.current) setCall({ status: 'idle' });
+  }, [clearCallResources]);
+  const failCall = useCallback((error: string) => {
+    const previous = callRef.current;
+    clearCallResources();
+    callRef.current = { ...previous, status: 'error', error, detail: 'Microphone and audio connection closed.', audioBlocked: false };
+    setCall(callRef.current);
+    if (previous.tripId) void api(`/trips/${previous.tripId}/call/end`, {}).catch(() => {});
+  }, [clearCallResources]);
+  const transport = useRef<CallTransport | null>(null);
+  if (!transport.current) transport.current = new CallTransport(
+    () => ({ channel: channel.current, ready: isSupabaseLive ? channelReady.current : ws.current?.readyState === WebSocket.OPEN, socket: ws.current, live: isSupabaseLive }),
+    signal => signal.type === 'call-end' || (signal.callId === callRef.current.callId && signal.tripId === callRef.current.tripId),
+  );
+  const sendSignal = useCallback((msg: CallSignal) => transport.current!.send(msg), []);
+  const endCall = useCallback(async () => {
     const current = callRef.current;
-    if (current.tripId) {
-      sendSignal({ type: 'call-end', tripId: current.tripId, callId: current.callId });
-      api(`/trips/${current.tripId}/call/end`, {}).catch(() => {});
-    }
+    peerSession.current?.hangUp();
     cleanupCall();
-  }, [cleanupCall, sendSignal]);
+    if (current.tripId) await api(`/trips/${current.tripId}/call/end`, {}).catch(() => {});
+  }, [cleanupCall]);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; clearCallResources(); }; }, [clearCallResources]);
   useEffect(() => {
     if (!data?.user.id) return;
     if (isStaticDemo) {
@@ -91,7 +110,7 @@ export function useTrampo() {
     const connect = () => {
       const socket = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`); ws.current = socket;
       socket.onopen = () => { if (live) { setConnected(true); attempts = 0; reload(); } };
-      socket.onmessage = async event => { if (live) await handleSignal(JSON.parse(event.data)); };
+      socket.onmessage = event => { if (live) { try { void handleSignalRef.current(JSON.parse(event.data)); } catch { /* Ignore malformed transport frames. */ } } };
       socket.onclose = () => { if (live) { setConnected(false); retry = setTimeout(connect, Math.min(1000 * 2 ** attempts++, 15000)); } };
       socket.onerror = () => socket.close();
     };
@@ -112,37 +131,94 @@ export function useTrampo() {
     navigator.geolocation.getCurrentPosition(send, fail, { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 });
     return () => { stopped = true; clearInterval(refresh); navigator.geolocation.clearWatch(watch); };
   }, [data?.user.id, data?.activeTrip?.id, data?.activeTrip?.status, data?.driver?.online, data?.driver?.status, notify]);
-  async function handleSignal(msg: any) {
-    if (msg.type === 'refresh') { reload(); return; }
-    if (msg.type === 'call-offer' && callRef.current.status === 'idle') {
-      pendingIce.current = []; incomingOffer.current = msg.offer;
-      const current = dataRef.current;
-      const callerName = msg.caller?.name || (current?.user.role === 'driver' ? current?.activeTrip?.rider.name : current?.activeTrip?.driver?.name) || 'Your trip participant';
-      setCall({ status: 'incoming', tripId: msg.tripId, callId: msg.callId, callerName });
+  const updateCall = useCallback((patch: Partial<CallState>) => {
+    if (!mounted.current || callRef.current.status === 'idle' || callRef.current.status === 'error') return;
+    const next = { ...callRef.current, ...patch };
+    callRef.current = next; setCall(next);
+  }, []);
+  const createCallPeer = useCallback((tripId: string, callId: string, callerName?: string) => {
+    const session = new CallPeer({
+      send: sendSignal,
+      update: patch => { if (peerSession.current === session) updateCall(patch); },
+      fail: error => { if (peerSession.current === session) failCall(error); },
+      end: reason => { if (peerSession.current === session) { cleanupCall(); if (reason === 'no_answer') notify('Call ended: no answer.', 'info'); } },
+      createPeer: servers => new RTCPeerConnection({ iceServers: servers, bundlePolicy: 'max-bundle' }),
+      microphone: () => navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }, video: false }),
+      createAudio: () => { const element = new Audio(); element.setAttribute('playsinline', ''); element.dataset.trampoCallAudio = 'true'; document.body.appendChild(element); return element; },
+    }, { tripId, callId, callerName });
+    peerSession.current = session;
+    return session;
+  }, [sendSignal, updateCall, failCall, cleanupCall, notify]);
+  async function handleSignal(raw: unknown) {
+    if (!mounted.current) return;
+    if (raw && typeof raw === 'object' && 'type' in raw && raw.type === 'refresh') { void reload(); return; }
+    const trip = dataRef.current?.activeTrip;
+    if (!trip || !['assigned', 'in_progress'].includes(trip.status) || !validSignal(raw, trip.id)) return;
+    const msg = raw;
+    const seenKey = `${msg.callId}:${msg.signalId}`;
+    if (msg.signalId && seenSignals.current.has(seenKey)) {
+      if (msg.type === 'call-offer') void sendSignal({ type: 'call-ready', tripId: msg.tripId, callId: msg.callId }).catch(() => {});
+      return;
     }
-    if (msg.type === 'call-answer' && pc.current && msg.callId === callRef.current.callId) {
-      try { await pc.current.setRemoteDescription(msg.answer); for (const c of pendingIce.current) await pc.current.addIceCandidate(c); pendingIce.current = []; setCall(c => ({ ...c, status: 'connecting' })); }
-      catch { setCall(c => ({ ...c, status: 'error', error: 'Could not connect the call. Please try again.' })); }
+    if (msg.signalId) { seenSignals.current.add(seenKey); if (seenSignals.current.size > 600) seenSignals.current.delete(seenSignals.current.values().next().value!); }
+    if ((msg.type === 'call-end' || msg.type === 'call-ended') && msg.callId === callRef.current.callId) {
+      cleanupCall(); if (msg.reason === 'no_answer') notify('Call ended: no answer.', 'info'); return;
     }
-    if (msg.type === 'call-ice' && msg.callId === callRef.current.callId) {
-      try { if (pc.current?.remoteDescription) await pc.current.addIceCandidate(msg.candidate); else pendingIce.current.push(msg.candidate); } catch {}
+    if (msg.type === 'call-offer') {
+      if (callRef.current.status === 'idle') {
+        pendingIce.current.retain(msg.callId); incomingOffer.current = msg.offer!;
+        const callerName = typeof msg.caller?.name === 'string' ? msg.caller.name.slice(0, 80) : (dataRef.current?.user.role === 'driver' ? trip.rider.name : trip.driver?.name) || 'Your trip participant';
+        callRef.current = { status: 'incoming', tripId: trip.id, callId: msg.callId, callerName, detail: 'Incoming audio call…' }; setCall(callRef.current);
+        if (incomingTimer.current) clearTimeout(incomingTimer.current);
+        incomingTimer.current = setTimeout(() => { if (callRef.current.status === 'incoming' && callRef.current.callId === msg.callId) { cleanupCall(); notify('Missed Trampo call. Keep the app open to receive calls.', 'info'); } }, CALL_TIMEOUT_MS);
+      } else if (msg.callId !== callRef.current.callId) return;
+      // Acknowledge even a duplicate offer. NEVER clear candidates already
+      // queued for this call: HTTP broadcasts can arrive out of order.
+      void sendSignal({ type: 'call-ready', tripId: trip.id, callId: msg.callId }).catch(() => {});
     }
-    if (msg.type === 'call-ended') { cleanupCall(); if (msg.reason === 'no_answer') notify('Call ended: no answer.', 'info'); }
+    if (msg.type === 'call-ice' && msg.candidate && (msg.callId === callRef.current.callId || (!callRef.current.callId && pendingIce.current.callCount < 5))) pendingIce.current.add(msg.callId, msg.candidate);
+    const session = peerSession.current;
+    if (session && msg.callId === session.identity.callId) {
+      if (msg.type === 'call-ice') for (const candidate of pendingIce.current.take(msg.callId)) session.receive({ ...msg, candidate });
+      else session.receive(msg);
+    }
   }
+  handleSignalRef.current = handleSignal;
   useEffect(() => {
     const trip = data?.activeTrip;
-    if (!isSupabaseLive || !supabase || !trip || !['assigned', 'in_progress'].includes(trip.status)) { channel.current = null; return; }
+    channelReady.current = false;
+    if (!isSupabaseLive || !supabase || !trip || !['assigned', 'in_progress'].includes(trip.status)) { channel.current = null; setConnected(false); return; }
     let live = true;
-    supabase.auth.getSession().then(({ data: session }) => {
+    let subscribed: RealtimeChannel | null = null;
+    const existing = channel.current;
+    if (existing) { void supabase.removeChannel(existing); channel.current = null; }
+    void supabase.auth.getSession().then(({ data: session }) => {
       if (!live || !session.session) return;
-      supabase!.realtime.setAuth(session.session.access_token);
-      const ch = supabase!.channel(`trip:${trip.id}`, { config: { private: true } });
-      channel.current = ch;
-      ch.on('broadcast', { event: 'signal' }, ({ payload }) => { if (live) void handleSignal(payload); });
-      ch.subscribe(status => { if (live) setConnected(status === 'SUBSCRIBED'); });
+      void supabase!.realtime.setAuth(session.session.access_token);
+      const ch = supabase!.channel(`trip:${trip.id}`, { config: { private: true, broadcast: { ack: true, self: false } } });
+      channel.current = ch; subscribed = ch;
+      ch.on('broadcast', { event: 'signal' }, ({ payload }) => { if (live) void handleSignalRef.current(payload); });
+      ch.subscribe(status => {
+        if (!live) return;
+        channelReady.current = status === 'SUBSCRIBED'; setConnected(channelReady.current);
+        if (channelReady.current) peerSession.current?.resync();
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+          channelReady.current = false;
+          if (callRef.current.status !== 'idle' && callRef.current.status !== 'error') updateCall({ detail: 'Call signaling interrupted. Reconnecting…' });
+        }
+      });
     });
-    return () => { live = false; if (channel.current) supabase!.removeChannel(channel.current); channel.current = null; cleanupCall(); };
-  }, [data?.activeTrip?.id, data?.activeTrip?.status]);
+    return () => {
+      live = false; channelReady.current = false;
+      if (subscribed && channel.current === subscribed) { channel.current = null; void supabase!.removeChannel(subscribed); }
+      // A trip status change must not tear down a healthy call. The call effect
+      // below ends it only when the trip is no longer callable (or id changes).
+    };
+  }, [data?.activeTrip?.id, data?.user.id, updateCall]);
+  useEffect(() => {
+    const trip = data?.activeTrip;
+    if (callRef.current.tripId && (!trip || trip.id !== callRef.current.tripId || !['assigned', 'in_progress'].includes(trip.status))) cleanupCall();
+  }, [data?.activeTrip?.id, data?.activeTrip?.status, cleanupCall]);
   useEffect(() => {
     if (call.status === 'incoming' && call.callId) {
       startIncomingCallAlert(call.callId, call.callerName || 'Your trip participant', callAlerts);
@@ -174,55 +250,60 @@ export function useTrampo() {
   }, [notify, updateCallAlerts]);
   const previewCallAlerts = useCallback(async () => { await previewCallAlert(callAlerts); }, [callAlerts]);
   const unlockCallRingtone = useCallback(() => unlockCallAudio(), []);
-  async function prepareCall(tripId: string, callId: string, iceServers: RTCIceServer[]) {
-    if (!navigator.mediaDevices?.getUserMedia || !window.RTCPeerConnection) throw new Error('Calling needs a secure HTTPS connection and a WebRTC-compatible browser.');
-    const media = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true }, video: false }); stream.current = media;
-    const peer = new RTCPeerConnection({ iceServers }); pc.current = peer;
-    media.getTracks().forEach(track => peer.addTrack(track, media));
-    const remote = new Audio(); remote.autoplay = true; audio.current = remote; document.body.appendChild(remote);
-    peer.ontrack = e => { remote.srcObject = e.streams[0] || new MediaStream([e.track]); remote.play().catch(() => notify('Tap the speaker control to enable call audio.', 'info')); };
-    peer.onicecandidate = e => { if (e.candidate) sendSignal({ type: 'call-ice', tripId, callId, candidate: e.candidate.toJSON() }); };
-    peer.onconnectionstatechange = () => {
-      if (peer.connectionState === 'connected') { if (callTimeout.current) clearTimeout(callTimeout.current); setCall(c => ({ ...c, status: 'connected', startedAt: Date.now() })); }
-      if (peer.connectionState === 'failed') setCall(c => ({ ...c, status: 'error', error: 'The audio connection failed. A TURN relay may be needed on this network.' }));
-    };
-    callTimeout.current = setTimeout(() => { if (callRef.current.status !== 'connected') { setCall(c => ({ ...c, status: 'error', error: 'No audio connection. Check that both participants are online; mobile networks may need a TURN relay.' })); } }, 35000);
-    return peer;
-  }
   async function startCall(tripId: string) {
-    if (callRef.current.status !== 'idle') return;
-    setCall({ status: 'calling', tripId });
+    if (callRef.current.status !== 'idle' || peerSession.current) return;
+    if (!navigator.mediaDevices?.getUserMedia || !window.RTCPeerConnection) { setCall({ status: 'error', tripId, error: 'Calling needs HTTPS and a WebRTC-compatible browser.' }); return; }
+    if (isSupabaseLive && !channelReady.current) {
+      const deadline = Date.now() + 8000;
+      while (!channelReady.current && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 100));
+      if (!channelReady.current) { setCall({ status: 'error', tripId, error: 'Call signaling is still connecting. Keep this page open and try again in a moment.' }); return; }
+    }
+    if (!isSupabaseLive && ws.current?.readyState !== WebSocket.OPEN) { setCall({ status: 'error', tripId, error: 'Call signaling is reconnecting. Try again in a moment.' }); return; }
+    callRef.current = { status: 'calling', tripId, detail: 'Preparing private audio…' }; setCall(callRef.current);
     void unlockCallAudio();
     try {
       const result = await api<{ callId: string; initiator: string; iceServers: RTCIceServer[] }>(`/trips/${tripId}/call`, {});
-      setCall({ status: 'calling', tripId, callId: result.callId }); callRef.current = { status: 'calling', tripId, callId: result.callId };
-      const peer = await prepareCall(tripId, result.callId, result.iceServers);
-      const offer = await peer.createOffer(); await peer.setLocalDescription(offer);
-      sendSignal({ type: 'call-offer', tripId, callId: result.callId, offer });
-    } catch (e) { setCall(c => ({ ...c, status: 'error', error: (e as Error).name === 'NotAllowedError' ? 'Microphone access was denied. Allow it in your browser settings to call.' : (e as Error).message })); }
+      if (!mounted.current || callRef.current.status !== 'calling' || callRef.current.tripId !== tripId) return;
+      if (dataRef.current?.user.id && result.initiator !== dataRef.current.user.id) throw new Error('The other participant is calling. Refresh and answer the incoming call.');
+      callRef.current = { ...callRef.current, callId: result.callId }; setCall(callRef.current);
+      const session = createCallPeer(tripId, result.callId);
+      await session.start(result.iceServers || []);
+    } catch (e) { if (callRef.current.tripId === tripId && callRef.current.status === 'calling') failCall((e as Error).message || 'Could not start the call. Please try again.'); }
   }
   async function answerCall() {
     const current = callRef.current, offer = incomingOffer.current;
-    if (!current.tripId || !current.callId || !offer) return;
-    setCall(c => ({ ...c, status: 'connecting' }));
+    if (current.status !== 'incoming' || !current.tripId || !current.callId || !offer || peerSession.current) return;
+    if (!navigator.mediaDevices?.getUserMedia || !window.RTCPeerConnection) { failCall('Calling needs HTTPS and a WebRTC-compatible browser.'); return; }
+    callRef.current = { ...current, status: 'connecting', detail: 'Preparing microphone…' }; setCall(callRef.current);
+    if (incomingTimer.current) clearTimeout(incomingTimer.current); incomingTimer.current = null;
     stopIncomingCallAlert();
     void unlockCallAudio();
+    const tripId = current.tripId, callId = current.callId;
     try {
-      const { iceServers } = await api<{ iceServers: RTCIceServer[] }>(`/trips/${current.tripId}/call/config`);
-      const peer = await prepareCall(current.tripId, current.callId, iceServers);
-      await peer.setRemoteDescription(offer);
-      for (const c of pendingIce.current) await peer.addIceCandidate(c);
-      pendingIce.current = [];
-      const answer = await peer.createAnswer(); await peer.setLocalDescription(answer);
-      await api(`/trips/${current.tripId}/call/answer`, {});
-      sendSignal({ type: 'call-answer', tripId: current.tripId, callId: current.callId, answer });
-    } catch (e) { setCall(c => ({ ...c, status: 'error', error: (e as Error).name === 'NotAllowedError' ? 'Microphone permission is needed to answer.' : (e as Error).message })); }
+      const [{ iceServers }] = await Promise.all([
+        api<{ iceServers: RTCIceServer[] }>(`/trips/${tripId}/call/config`),
+        api(`/trips/${tripId}/call/answer`, { callId }),
+      ]);
+      if (!mounted.current || callRef.current.callId !== callId || callRef.current.status !== 'connecting') return;
+      const session = createCallPeer(tripId, callId, current.callerName);
+      for (const candidate of pendingIce.current.take(callId)) session.receive({ type: 'call-ice', tripId, callId, candidate });
+      // The answer is sent before waiting for a server broadcast echo. A database
+      // answer alone never changes the UI to Connected.
+      await session.answer(offer, iceServers || []);
+      void session.playAudio();
+    } catch (e) { if (callRef.current.callId === callId && callRef.current.status === 'connecting') failCall((e as Error).name === 'NotAllowedError' ? 'Microphone permission is needed to answer. Allow it in browser settings and try again.' : (e as Error).message); }
   }
-  function toggleMute() { const muted = !callRef.current.muted; stream.current?.getAudioTracks().forEach(t => { t.enabled = !muted; }); setCall(c => ({ ...c, muted })); }
+  async function enableCallSound() { await unlockCallAudio(); return peerSession.current?.playAudio() ?? false; }
+  async function retryCall() {
+    const tripId = callRef.current.tripId || dataRef.current?.activeTrip?.id;
+    await endCall();
+    if (tripId) await startCall(tripId);
+  }
+  function toggleMute() { peerSession.current?.mute(); }
   async function switchRole(role: 'passenger' | 'driver' | 'admin', userId?: string) {
     if (isSupabaseLive) throw new Error('Demo role switching is disabled on the live backend.');
     endCall(); await api('/demo/session', { role, userId }); await reload();
   }
-  return { data, error, connected, toast, setToast, notify, reload, call, startCall, answerCall, endCall, toggleMute, switchRole, callAlerts, callPermission, updateCallAlerts, enableCallAlerts, previewCallAlerts, unlockCallRingtone };
+  return { data, error, connected, toast, setToast, notify, reload, call, startCall, answerCall, endCall, retryCall, enableCallSound, toggleMute, switchRole, callAlerts, callPermission, updateCallAlerts, enableCallAlerts, previewCallAlerts, unlockCallRingtone };
 }
 export type Trampo = ReturnType<typeof useTrampo>;

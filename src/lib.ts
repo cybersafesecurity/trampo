@@ -45,24 +45,28 @@ export function estimate(pickup: Position, dropoff: Position, service: Service) 
   return { distanceKm: km, minutes, fare: Math.max(rates[3], Math.ceil((rates[0] + km * rates[1] + minutes * rates[2]) / 500) * 500), currency: 'UGX', estimate: true };
 }
 export class ApiError extends Error { constructor(message: string, public code?: string, public details?: unknown) { super(message); } }
-export async function api<T = any>(path: string, body?: unknown, method?: string): Promise<T> {
+const requestSignal = (signal?: AbortSignal) => signal ? AbortSignal.any([AbortSignal.timeout(15000), signal]) : AbortSignal.timeout(15000);
+export async function api<T = any>(path: string, body?: unknown, method?: string, signal?: AbortSignal): Promise<T> {
   if (isStaticDemo) return staticApi<T>(path, body, method);
   if (isSupabaseLive) {
     if (!supabase) throw new ApiError(supabaseConfigError || 'Live backend is not configured.');
     const { data: sessionData } = await supabase.auth.getSession();
     const token = sessionData.session?.access_token;
-    const response = await fetch(`${supabaseFunctionUrl}${path}`, {
+    let response: Response;
+    try { response = await fetch(`${supabaseFunctionUrl}${path}`, {
       method: method || (body !== undefined ? 'POST' : 'GET'),
       headers: { 'Content-Type': 'application/json', 'X-Trampo-Client': 'web', apikey: supabasePublishableKey, ...(token ? { Authorization: `Bearer ${token}` } : {}) },
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
-    });
+      signal: requestSignal(signal),
+    }); } catch (e) { if (signal?.aborted) throw e; throw new ApiError((e as Error).name === 'TimeoutError' ? 'Trampo could not reach the server. Check your connection and try again.' : 'Network error. Check your connection and try again.'); }
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new ApiError(data.error || 'Unable to connect to Trampo.', data.code, data.details);
     return data as T;
   }
-  const response = await fetch(`/api${path}`, { method: method || (body !== undefined ? 'POST' : 'GET'), credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-Trampo-Client': 'web' }, ...(body !== undefined ? { body: JSON.stringify(body) } : {}) });
-  const data = await response.json();
-  if (!response.ok) throw new ApiError(data.error || 'Unable to connect to Trampo.', data.code, data.details);
+  let nodeResponse: Response;
+  try { nodeResponse = await fetch(`/api${path}`, { method: method || (body !== undefined ? 'POST' : 'GET'), credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-Trampo-Client': 'web' }, ...(body !== undefined ? { body: JSON.stringify(body) } : {}), signal: requestSignal(signal) }); } catch (e) { if (e instanceof ApiError || signal?.aborted) throw e; throw new ApiError((e as Error).name === 'TimeoutError' ? 'Trampo could not reach the server. Check your connection and try again.' : 'Network error. Check your connection and try again.'); }
+  const data = await nodeResponse.json();
+  if (!nodeResponse.ok) throw new ApiError(data.error || 'Unable to connect to Trampo.', data.code, data.details);
   return data;
 }
 export const statusLabel = (status: string) => ({ searching: 'Finding your driver', assigned: 'Driver on the way', in_progress: 'On the move', completed: 'Completed', cancelled: 'Cancelled', scheduled: 'Scheduled' }[status] || status);

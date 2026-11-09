@@ -14,7 +14,7 @@ Project: `trampo` · ref `euknlccrsfvuaymuecpd` · region `eu-west-2`.
 cp .env.live.example .env.live      # then fill in the two public values below
 npm install
 npm run build:live                  # outputs dist-live/
-npm run preview:live                # serves dist-live/ on 0.0.0.0:3000
+npm run preview:live                # serves dist-live/ on 0.0.0.0:3004
 ```
 
 `.env.live` (only publishable, browser-safe values — never a service/secret key):
@@ -132,11 +132,17 @@ The live build uses direct browser-to-browser WebRTC (no per-minute charge, no
 recording). Incoming calls can show browser notifications, ring, vibrate, and flash
 the title after the user explicitly enables call alerts from the bell menu or incoming
 call screen. Alerts are device-local and stop on answer/decline/end; they are not
-closed-app push and require the Trampo page to stay open and connected. Public STUN (`stun:stun.l.google.com:19302`) is configured. For restrictive
-mobile networks add a TURN relay by setting Edge Function secrets `TURN_URLS`,
-`TURN_USERNAME`, `TURN_CREDENTIAL`. For scale, the recommended free self-hosted media
-server is **LiveKit** (Apache-2.0) with **coturn**; see `docs/ARCHITECTURE.md` and
-`deploy/`.
+closed-app push and require the Trampo page to stay open and connected. Public STUN (`stun:stun.l.google.com:19302`) is configured. A static TURN relay is
+configured server-side through Edge Function secrets `TURN_URLS`, `TURN_USERNAME`,
+`TURN_CREDENTIAL`. The Metered account secret never leaves the backend; static TURN
+credentials are delivered only to authenticated matched participants as WebRTC ICE
+credentials, so use a dedicated relay account and rotate it if exposed. Metered is the
+preferred relay provider: set `METERED_APP` and `METERED_SECRET_KEY` to issue cached,
+expiring TURN credentials from the backend (see `docs/CALLING_TURN.md`). Static TURN
+credentials remain a fallback. Calls still need field verification on restrictive
+Ugandan mobile networks; a configured relay is not proof that every carrier path works.
+For scale, the recommended free self-hosted media server is **LiveKit** (Apache-2.0)
+with **coturn**; see `docs/ARCHITECTURE.md` and `deploy/`.
 
 ## Known limitations before a public Uganda launch
 
@@ -150,8 +156,9 @@ server is **LiveKit** (Apache-2.0) with **coturn**; see `docs/ARCHITECTURE.md` a
 - **No document upload/KYC, no in-app payments, no external emergency dispatch.** SOS
   records an alert to Trampo Operations only. Driver "approval" is an operational
   document check, not automated verification.
-- **No TURN relay is configured yet**, so calls may fail on symmetric-NAT carrier
-  networks until one is added.
+- **TURN field verification remains open.** A server-side relay is configured, but
+  symmetric-NAT carrier networks and relay quota/credential expiry must be tested with
+  real passenger/driver devices before public launch.
 - Maps are illustrative; fares are estimates, not road-metered. See
   `docs/PRODUCTION_CHECKLIST.md`.
 

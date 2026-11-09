@@ -5,14 +5,16 @@ trip map with **Leaflet + OpenStreetMap tiles** (no API key required). The map s
 pickup, ordered stops, final destination and latest driver location. If tiles cannot
 load, it falls back to a clearly labelled illustrated overview.
 
-With an optional Google Maps browser key configured, Trampo also reverse-geocodes the
-exact device fix into an address. The geocoder only labels the point — it never replaces
-the device coordinates used for dispatch or boarding.
+With an optional Google Maps browser key configured, Trampo resolves typed destinations
+through Google autocomplete/geocoding and reverse-geocodes GPS/custom coordinates into
+address labels. Without a key, it uses a clearly labelled OpenStreetMap/Photon fallback.
+The geocoder only labels or proposes a point — the passenger reviews the result, and GPS
+fixes used for dispatch/boarding are never silently replaced.
 
 ## Enable optional address lookup
 
-1. In Google Cloud, enable **Maps JavaScript API** and **Geocoding API** on a billing-enabled
-   project.
+1. In Google Cloud, enable **Maps JavaScript API**, **Places API** (autocomplete) and
+   **Geocoding API** on a billing-enabled project.
 2. Create a **browser API key**. Restrict it by HTTP referrer to
    `https://trampo.lat/*` and `https://www.trampo.lat/*` (and your own preview origin if needed),
    and restrict it to those two APIs. Do not use a service-account key or OAuth client secret.
@@ -26,14 +28,16 @@ the device coordinates used for dispatch or boarding.
    `VITE_GOOGLE_MAPS_API_KEY`, then re-run the Pages workflow. `VITE_*` values are embedded
    in the public bundle; referrer and API restrictions protect a browser key. Never put
    secret/server keys here.
-5. Rebuild/redeploy. Without a key the Leaflet map still works and current-location pickup
-   keeps the exact GPS coordinates, with a clear notice that address lookup is unavailable.
+5. Rebuild/redeploy. Without a key the Leaflet map still works, destination search uses
+   OpenStreetMap/Photon, and GPS/custom coordinates are kept even if address lookup fails.
+   The live Supabase backend proxies/caches Photon and applies per-account/global limits;
+   the static demo may call Photon directly and remains subject to its fair-use policy.
 
 ## Failure behaviour
 
 - Permission denied/unavailable: no pickup is invented; the rider can choose manually.
-- Geocoder outage/zero results: the exact GPS coordinates remain the pickup; the UI says
-  the address could not be resolved.
+- Geocoder outage/zero results: saved places and manual coordinate entry remain available;
+  exact GPS/custom coordinates are kept and the UI labels the provider or fallback honestly.
 - OpenStreetMap tile outage: the illustrated map is labelled as a fallback.
 - Location outside the Uganda service area is still rejected by the server gate.
 

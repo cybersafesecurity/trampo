@@ -125,7 +125,7 @@ export default function SpiroSensor({ onBack }: { onBack: () => void }) {
     <div className="spiro-heading">
       <div className="eyebrow">SPIRO SENSOR</div>
       <h1>Find the SPIRO bike near you.</h1>
-      <p>Scans for Bluetooth devices named <strong>TMD024…</strong>, labels them <strong>SPIRO</strong>, and estimates how far away they are and which way they lie.</p>
+      <p>Scans for Spiro bikes and shows their distance and direction relative to you.</p>
     </div>
 
     {support.state === 'unsupported' && <Notice tone="warning">{support.message}</Notice>}

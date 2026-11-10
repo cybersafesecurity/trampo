@@ -1,5 +1,5 @@
 export type Service = 'boda' | 'comfort' | 'vip';
-export type Page = 'ride' | 'activity' | 'safety' | 'vip' | 'drive' | 'operations' | 'profile';
+export type Page = 'ride' | 'activity' | 'safety' | 'vip' | 'drive' | 'operations' | 'profile' | 'spiro';
 export type AccountType = 'admin' | 'car_driver' | 'motorbike_rider' | 'passenger';
 export type Position = { lat: number; lng: number; name?: string };
 export type Fix = Position & { accuracy: number; source: 'browser' | 'simulated'; updatedAt: number };

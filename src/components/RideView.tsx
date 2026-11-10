@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ArrowRight, ArrowUpRight, CalendarDays, Check, ChevronDown, Clock3, Crosshair, Crown, Leaf, LocateFixed, LockKeyhole, MapPin, Moon, Phone, ShieldCheck, Smartphone, Sparkles, Users, WalletCards } from 'lucide-react';
+import { ArrowRight, ArrowUpRight, CalendarDays, Check, ChevronDown, Clock3, Crosshair, Crown, Leaf, LocateFixed, LockKeyhole, MapPin, Moon, Phone, Radar, ShieldCheck, Smartphone, Sparkles, Users, WalletCards } from 'lucide-react';
 import type { Page, Place, Service } from '../types';
 import type { Trampo } from '../useTrampo';
 import { api, asset, DEFAULT_PICKUP, estimate, money, PLACES, SERVICE_INFO } from '../lib';
@@ -36,6 +36,7 @@ export default function RideView({ t, navigate, initialService = 'boda' }: { t: 
   }
   return <>
     <SectionHeading title={trip ? 'Your ride, your peace of mind.' : 'Where are we going?'} text={trip ? 'Stay connected. We’ll take care of the journey.' : 'From your everyday commute to your next big moment.'} action={<SafetySeal />} />
+    {!trip && <button className="spiro-entry" onClick={() => navigate('spiro')}><Radar size={22} strokeWidth={1.6} /><span><strong>Spiro Sensor <span className="badge badge-gold">Experimental</span></strong><small>Scan for nearby SPIRO bikes and see how far away they are.</small></span><ArrowUpRight size={16} /></button>}
     <div className="booking-layout">
       {trip ? <TripPanel trip={trip} t={t} onDriver={openDriver} onSafety={() => navigate('safety')} /> : <section className="booking-card">
         <div className="booking-tabs"><button className={tab === 'now' ? 'active' : ''} onClick={() => setTab('now')}><Clock3 size={16} /> Ride now</button><button className={tab === 'later' ? 'active' : ''} onClick={() => setTab('later')}><CalendarDays size={16} /> Schedule</button></div>

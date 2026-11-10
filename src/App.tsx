@@ -17,12 +17,13 @@ import GoogleSignInButton from './components/GoogleSignInButton';
 import CallOverlay from './components/CallOverlay';
 import CallAlertSettings from './components/CallAlertSettings';
 import SharedTrip from './components/SharedTrip';
+import SpiroSensor from './components/SpiroSensor';
 import { PwaInstallButton, PwaStatusBanners } from './components/PwaInstallButton';
 import { usePwa } from './pwa';
 import { isSupabaseLive, supabase } from './supabase';
 import { authCallbackError, clearAuthCallback } from './auth';
 
-const pages: Record<Page, string> = { ride: 'Book a ride', activity: 'My trips', safety: 'Safety centre', vip: 'Trampo VIP', drive: 'Driver hub', operations: 'Operations', profile: 'My profile' };
+const pages: Record<Page, string> = { ride: 'Book a ride', activity: 'My trips', safety: 'Safety centre', vip: 'Trampo VIP', drive: 'Driver hub', operations: 'Operations', profile: 'My profile', spiro: 'Spiro Sensor' };
 function hashPage(): Page { const value = location.hash.replace('#', ''); return value in pages ? value as Page : 'ride'; }
 export default function App() {
   const t = useTrampo();
@@ -71,6 +72,7 @@ export default function App() {
       {page === 'drive' && <DriveView t={t} onPassenger={openPassenger} />}
       {page === 'operations' && <OperationsView t={t} />}
       {page === 'profile' && <ProfileView t={t} onAccount={() => setAuth('account')} onDrive={() => navigate('drive')} />}
+      {page === 'spiro' && <SpiroSensor onBack={() => navigate('ride')} />}
       <footer className="main-footer"><span>© {new Date().getFullYear()} Trampo <i /> Made for the Pearl of Africa.</span><span>{data.demo ? <><span className="live-dot" /> {isStaticDemo ? 'GitHub Pages demo · Browser-only · No live calls or dispatch' : 'Demo fleet · No real bookings or emergency dispatch'}</> : <><span className={`live-dot ${t.connected ? '' : 'offline'}`} />{t.connected ? 'Connected' : 'Reconnecting'}</>}<button onClick={() => setHelp(true)} aria-label="About Trampo"><CircleHelp size={15} /></button></span></footer>
     </main></div>
     {t.toast && <Toast {...t.toast} onClose={() => t.setToast(null)} />}

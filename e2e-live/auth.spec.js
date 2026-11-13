@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 
 const ORIGIN = 'https://euknlccrsfvuaymuecpd.supabase.co';
 const ADMIN = 'trampo.the.app@gmail.com';
-const PASSWORD = 'My-Chosen-Admin-Password-2026';
+const PASSWORD = process.env.E2E_TEST_PASSWORD || 'mock-password-for-stubbed-tests-only';
 const user = {
   id: '00000000-0000-4000-8000-000000000001', aud: 'authenticated', role: 'authenticated', email: ADMIN,
   email_confirmed_at: '2026-11-08T00:00:00Z', created_at: '2026-11-08T00:00:00Z', updated_at: '2026-11-08T00:00:00Z',
